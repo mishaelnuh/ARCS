@@ -7,7 +7,7 @@ def geodesics(surf, extended_surf, plane, num_geo):
 
     Parameters:
         surf (Brep): Surface to cover. Input as Brep in order to maintain trims.
-        extended_surf (Surface): Surface to cover.
+        extended_surf (Surface): Extended surface used to form geodesics on.
         plane (Plane): Rhino plane to orient geodesics to.
         num_geo (int): Number of geodesics to generate.
 
