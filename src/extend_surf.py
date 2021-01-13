@@ -4,6 +4,15 @@ import math
 from System import Array
 
 def extend_surf(surf, plane):
+    '''Extends a surface using consecutive bounding boxes.
+
+    Parameters:
+        surf (Brep): Surface to extend. Input as Brep in order to maintain trims.
+        plane (Plane): Plane to orient extended surface borders to.
+
+    Returns:
+        extended_surf (Brep): Extended surface.
+    '''
     tol = rd.ActiveDoc.ModelAbsoluteTolerance
 
     # Get rotated plane to 45 deg

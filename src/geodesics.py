@@ -3,6 +3,17 @@ import Rhino.RhinoDoc as rd
 import math
 
 def geodesics(surf, extended_surf, plane, num_geo):
+    '''Calculates geodesic curves covering the surface using the extended surface
+
+    Parameters:
+        surf (Brep): Surface to cover. Input as Brep in order to maintain trims.
+        extended_surf (Surface): Surface to cover.
+        plane (Plane): Rhino plane to orient geodesics to.
+        num_geo (int): Number of geodesics to generate.
+
+    Returns:
+        geodesics (List[Curve]): Geodesic curves.
+    '''
     tol = rd.ActiveDoc.ModelAbsoluteTolerance
     
     ## Find rectangle to start geodesic with
