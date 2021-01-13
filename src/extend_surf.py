@@ -11,7 +11,7 @@ def extend_surf(surf, plane):
         plane (Plane): Plane to orient extended surface borders to.
 
     Returns:
-        extended_surf (Brep): Extended surface.
+        extended_surf (Surface): Extended surface.
     '''
     tol = rd.ActiveDoc.ModelAbsoluteTolerance
 
@@ -34,5 +34,6 @@ def extend_surf(surf, plane):
         rg.Mesh.CreateFromBrep(surf)[0]]), None, 20, 20, False, True,
         extended_outline.GetLength() / 100, 50, 10, 
         Array[bool]([True, True, True, True]), tol)
-
+    extended_surf = extended_surf.Surfaces[0]
+    
     return extended_surf
