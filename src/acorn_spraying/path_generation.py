@@ -4,43 +4,42 @@ import math
 
 from acorn_spraying.misc import extend_surf, connect_geometries_bounds, offset_surf_bounds, filter_lines_dist_surf, trim_curve_boundary
 
-def connect_paths_through_bounds(geometries, surf, overspray_dist):
+def connect_paths_through_bounds(geometries, surf, extended_surf, overspray_dist):
     '''Connects spray paths and other points of interests through connectors
     made from a curve offset from the surface edges. This ensures that the
     path connectors do not go over the surface itself.
 
     Parameters:
         geometries (List[GeometryBase]): Geometries to connect. Only curves and points.
-        surf (Brep): Surface to offset border from. Input as Brep in order to maintain trims.
+        surf (Brep): Surface to get bounds from.
+        extend_surf (Surface): Extended surface.
         overspray_dist (float): Distance to offset edge curve by.
 
     Returns:
         connected_path (Curve): Connected curve.
     '''
-    extended_surf = extend_surf(surf, rg.Plane.WorldYZ)
     bounds = offset_surf_bounds(surf, extended_surf, overspray_dist)
     return connect_geometries_bounds(geometries, bounds)
 
 
-def spray_path(surf, angle, dist, overspray_dist):
+def spray_path(surf, extended_surf, angle, dist, overspray_dist):
     '''Generates spray path.
 
     Parameters:
         surf (Brep): Surface to spray. Input as Brep in order to maintain trims.
-        angle (float): Angle to generate paths at in radians.
-        dist (float): distance between path lines.
-        overspray_dist (float): length to extend path lines past surface bounds.
+        extended_surf (Surface): Extended surface. Use extend_surf or untrim the Brep.
+        angle (float): Angle to generate geodesics at in radians.
+        dist (float): Distance between path lines.
+        overspray_dist (float): Length to extend path lines past surface bounds.
 
     Returns:
         path (Curve): Spray path.
     '''
-    
+    tol = rd.ActiveDoc.ModelAbsoluteTolerance
+
     # Define planes and 90 deg rotated plane
     plane = rg.Plane.WorldYZ
     plane.Rotate(angle, rg.Vector3d(0, 0, 1))
-
-    # Get extended surface
-    extended_surf = extend_surf(surf, plane)
 
     # Find geodesics
     geodesics_curves = geodesics(surf, extended_surf, plane, 10)
@@ -50,6 +49,10 @@ def spray_path(surf, angle, dist, overspray_dist):
 
     # Filter curves
     path = filter_lines_dist_surf(path, surf, dist / 2)
+
+    # Pull paths to surface
+    path = [extended_surf.Pullback(p, tol) for p in path]
+    path = [extended_surf.Pushup(p, tol) for p in path]
 
     # Trim paths
     bounds = offset_surf_bounds(surf, extended_surf, overspray_dist)
