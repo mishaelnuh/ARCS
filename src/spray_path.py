@@ -1,11 +1,13 @@
+import Rhino.Geometry as rg
+import math
 import extend_surf
 import geodesics
 import ortho_geodesics
 import filter_lines_dist_surf
 import offset_surf_bounds
 import trim_curve_boundary
-import Rhino.Geometry as rg
-import math
+import connect_curves_bounds
+connect_curves_bounds = reload(connect_curves_bounds)
 
 def spray_path(surf, angle, dist, overspray_dist):
     '''Generates spray path.
@@ -37,11 +39,17 @@ def spray_path(surf, angle, dist, overspray_dist):
     path = filter_lines_dist_surf.filter_lines_dist_surf(path, surf, dist / 2)
 
     # Trim paths
-    trimmer = offset_surf_bounds.offset_surf_bounds(surf, extended_surf, overspray_dist)
+    bounds = offset_surf_bounds.offset_surf_bounds(surf, extended_surf, overspray_dist)
 
-    path = [trim_curve_boundary.trim_curve_boundary(p, trimmer)[0] for p in path]
+    path = [trim_curve_boundary.trim_curve_boundary(p, bounds)[0] for p in path]
 
     # Flatten lists
     path = [item for sublist in path for item in sublist]
+
+    # Connect paths together through the bounds
+    for i in range(1, len(path), 2):
+        path[i].Reverse()
+    
+    path = connect_curves_bounds.connect_curves_bounds(path, bounds)
 
     return path
