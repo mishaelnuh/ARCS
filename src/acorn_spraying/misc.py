@@ -218,3 +218,47 @@ def get_subcurve(curve, t_0, t_1):
         c_1 = curve.Trim(domain.T0, t_1)
         joined = rg.Curve.JoinCurves([c_0, c_1])[0]
         return joined
+
+def polyline_centroid(polyline):
+    '''Calculates the area and centroid of a polyline.
+
+    Parameters:
+        polyline (Polyline): Closed polyline.
+
+    Returns:
+        area (float): Area of polyline.
+        centroid (Point3D): Centroid of polyline.
+    '''
+
+    # Explode to lines
+    exploded_outline = outline.DuplicateSegments()
+
+    # Find centroid
+    area = 0
+    centroid_x = 0
+    centroid_y = 0
+
+    # Algorithm only works when all values are positive so perform calc on
+    # translated vertices then translate back
+    bounds = polyline.GetBoundingBox(rg.Plane.WorldXY)
+
+    for i in range(len(exploded_outline) - 1):
+        p1 = exploded_outline[i].PointAtStart - bounds.Min
+        p2 = exploded_outline[i + 1].PointAtStart - bounds.Min
+        tmp = p1.X * p2.Y - p2.X * p1.Y
+        area += tmp
+        centroid_x += (p1.X + p2.X) * tmp
+        centroid_y += (p1.Y + p2.Y) * tmp
+    
+    # Flip signs if the polyline was oriented counterclockwise
+    if (area < 0):
+        area *= -1
+        centroid_x *= -1
+        centroid_y *= -1
+        
+    area /= 2
+    centroid_x /= 6 * area
+    centroid_y /= 6 * area
+    centroid = rg.Point3d(centroid_x, centroid_y, 0) + bounds.Min
+
+    return [area, centroid]
