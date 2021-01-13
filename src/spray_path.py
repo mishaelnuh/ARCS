@@ -6,8 +6,8 @@ import ortho_geodesics
 import filter_lines_dist_surf
 import offset_surf_bounds
 import trim_curve_boundary
-import connect_curves_bounds
-connect_curves_bounds = reload(connect_curves_bounds)
+import connect_geometries_bounds
+connect_geometries_bounds = reload(connect_geometries_bounds)
 
 def spray_path(surf, angle, dist, overspray_dist):
     '''Generates spray path.
