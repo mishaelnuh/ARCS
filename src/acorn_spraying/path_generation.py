@@ -4,9 +4,23 @@ import math
 
 from acorn_spraying.misc import extend_surf, connect_geometries_bounds, offset_surf_bounds, filter_lines_dist_surf, trim_curve_boundary
 
-__all__ = [
-	'spray_path',
-]
+def connect_paths_through_bounds(geometries, surf, overspray_dist):
+    '''Connects spray paths and other points of interests through connectors
+    made from a curve offset from the surface edges. This ensures that the
+    path connectors do not go over the surface itself.
+
+    Parameters:
+        geometries (List[GeometryBase]): Geometries to connect. Only curves and points.
+        surf (Brep): Surface to offset border from. Input as Brep in order to maintain trims.
+        overspray_dist (float): Distance to offset edge curve by.
+
+    Returns:
+        connected_path (Curve): Connected curve.
+    '''
+    extended_surf = extend_surf(surf, rg.Plane.WorldYZ)
+    bounds = offset_surf_bounds(surf, extended_surf, overspray_dist)
+    return connect_geometries_bounds(geometries, bounds)
+
 
 def spray_path(surf, angle, dist, overspray_dist):
     '''Generates spray path.
@@ -52,7 +66,6 @@ def spray_path(surf, angle, dist, overspray_dist):
     path = connect_geometries_bounds(path, bounds)
 
     return path
-
 
 def geodesics(surf, extended_surf, plane, num_geo):
     '''Calculates geodesic curves covering the surface using the extended surface
