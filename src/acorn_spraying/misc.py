@@ -157,6 +157,8 @@ def connect_geometries_bounds(geometries, bounds):
             p_0 = geometries[i].PointAtEnd
         elif (geometries[i].GetType() == rg.Point):
             p_0 = geometries[i].Location
+        elif (geometries[i].GetType() == rg.Point3d):
+            p_0 = geometries[i]
         else:
             raise Exception('Only curves and points supported.')
         
@@ -164,6 +166,8 @@ def connect_geometries_bounds(geometries, bounds):
             p_1 = geometries[i + 1].PointAtStart
         elif (geometries[i + 1].GetType() == rg.Point):
             p_1 = geometries[i + 1].Location
+        elif (geometries[i + 1].GetType() == rg.Point3d):
+            p_1 = geometries[i + 1]
         else:
             raise Exception('Only curves and points supported.')
         
