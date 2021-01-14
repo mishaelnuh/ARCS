@@ -3,16 +3,16 @@ import Grasshopper, GhPython
 import System
 import Rhino
 import clr
-from acorn_spraying.path_generation import spray_path
+from acorn_spraying.path_generation import connect_paths_through_bounds
 
-class SprayPath(component):
+class ConnectPathsThroughBounds(component):
     def __new__(cls):
         instance = Grasshopper.Kernel.GH_Component.__new__(cls,
-            "SprayPath", "ACORN_Spray", """Generates spray path""", "ACORN", "Spraying")
+            "ConnectPathsThroughBounds", "ACORN_Connect", """Connects spray paths and other points of interests through connectors made from a curve offset from the surface edges.""", "ACORN", "Spraying")
         return instance
-    
+
     def get_ComponentGuid(self):
-        return System.Guid("1c28dafc-d26a-4b80-af41-c71a9c756a5b")
+        return System.Guid("a2185e97-3871-44d0-ac9d-ba26998198ad")
     
     def SetUpParam(self, p, name, nickname, description):
         p.Name = name
@@ -21,23 +21,18 @@ class SprayPath(component):
         p.Optional = True
     
     def RegisterInputParams(self, pManager):
+        p = Grasshopper.Kernel.Parameters.Param_Geometry()
+        self.SetUpParam(p, "geometries", "geometries", "Geometries to connect. Only curves and points.")
+        p.Access = Grasshopper.Kernel.GH_ParamAccess.list
+        self.Params.Input.Add(p)
+
         p = Grasshopper.Kernel.Parameters.Param_Brep()
-        self.SetUpParam(p, "surf", "surf", "Surface to spray. Input as Brep in order to maintain trims.")
+        self.SetUpParam(p, "surf", "surf", "Surface to get bounds from.")
         p.Access = Grasshopper.Kernel.GH_ParamAccess.item
         self.Params.Input.Add(p)
 
         p = Grasshopper.Kernel.Parameters.Param_Surface()
         self.SetUpParam(p, "extended_surf", "extended_surf", "Extended surface. Use extend_surf or untrim the Brep.")
-        p.Access = Grasshopper.Kernel.GH_ParamAccess.item
-        self.Params.Input.Add(p)
-
-        p = Grasshopper.Kernel.Parameters.Param_Number()
-        self.SetUpParam(p, "angle", "angle", "Angle to generate paths at in radians.")
-        p.Access = Grasshopper.Kernel.GH_ParamAccess.item
-        self.Params.Input.Add(p)
-        
-        p = Grasshopper.Kernel.Parameters.Param_Number()
-        self.SetUpParam(p, "dist", "dist", "Distance between path lines.")
         p.Access = Grasshopper.Kernel.GH_ParamAccess.item
         self.Params.Input.Add(p)
 
@@ -48,18 +43,17 @@ class SprayPath(component):
     
     def RegisterOutputParams(self, pManager):
         p = Grasshopper.Kernel.Parameters.Param_Curve()
-        self.SetUpParam(p, "path", "path", "Spray path.")
+        self.SetUpParam(p, "connected_path", "connected_path", "Connected curve.")
         self.Params.Output.Add(p)
     
     def SolveInstance(self, DA):
-        surf = self.marshal.GetInput(DA, 0)
-        extended_surf = self.marshal.GetInput(DA, 1)
+        geometries = self.marshal.GetInput(DA, 0)
+        surf = self.marshal.GetInput(DA, 1)
+        extended_surf = self.marshal.GetInput(DA, 2)
         extended_surf = extended_surf.Surfaces[0] # Needed because the component automatically converts surface to brep
-        angle = self.marshal.GetInput(DA, 2)
-        dist = self.marshal.GetInput(DA, 3)
-        overspray_dist = self.marshal.GetInput(DA, 4)
+        overspray_dist = self.marshal.GetInput(DA, 3)
         
-        result = spray_path(surf, extended_surf, angle, dist, overspray_dist)
+        result = connect_paths_through_bounds(geometries, surf, extended_surf, overspray_dist)
 
         if result is not None:
             self.marshal.SetOutput(result, DA, 0, True)
