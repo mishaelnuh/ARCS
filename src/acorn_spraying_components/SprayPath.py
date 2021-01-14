@@ -2,12 +2,13 @@ from ghpythonlib.componentbase import dotnetcompiledcomponent as component
 import Grasshopper, GhPython
 import System
 import Rhino
+import clr
 from acorn_spraying.path_generation import spray_path
 
 class MyComponent(component):
     def __new__(cls):
         instance = Grasshopper.Kernel.GH_Component.__new__(cls,
-            "SprayPath", "ACORN_SPRAY", """Generates spray path""", "ACORN", "Spraying")
+            "SprayPath", "ACORN_Spray", """Generates spray path""", "ACORN", "Spraying")
         return instance
     
     def get_ComponentGuid(self):
@@ -46,16 +47,19 @@ class MyComponent(component):
         self.Params.Input.Add(p)
     
     def RegisterOutputParams(self, pManager):
-        p = Grasshopper.Kernel.Parameters.Param_Curve()
+        p = Grasshopper.Kernel.Parameters.Param_GenericObject()
         self.SetUpParam(p, "path", "path", "Spray path.")
         self.Params.Output.Add(p)
     
     def SolveInstance(self, DA):
         p0 = self.marshal.GetInput(DA, 0)
         p1 = self.marshal.GetInput(DA, 1)
+        p1 = p1.Surfaces[0] # Needed because the component automatically converts surface to brep
         p2 = self.marshal.GetInput(DA, 2)
         p3 = self.marshal.GetInput(DA, 3)
-        result = self.RunScript(p0, p1, p2, p3)
+        p4 = self.marshal.GetInput(DA, 4)
+        
+        result = self.RunScript(p0, p1, p2, p3, p4)
 
         if result is not None:
             self.marshal.SetOutput(result, DA, 0, True)
@@ -73,7 +77,7 @@ import System
 
 class AssemblyInfo(GhPython.Assemblies.PythonAssemblyInfo):
     def get_AssemblyName(self):
-        return "acorn_spraying"
+        return "AcornSpraying"
     
     def get_AssemblyDescription(self):
         return """Robotic concrete spraying path generation."""
