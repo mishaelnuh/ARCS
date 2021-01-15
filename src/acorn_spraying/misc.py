@@ -30,9 +30,23 @@ def extend_surf(surf, plane):
     extended_outline = rg.Polyline([bounds_corners[i] for i in (0, 4, 5, 1, 0)])
     extended_outline = extended_outline.ToPolylineCurve()
 
+    # Populate the Brep with 10000 points
+    objects = []
+    bound_box = surf.GetBoundingBox(False)
+
+    for i in range(100):
+        for j in range(100):
+            x = bound_box.Min.X + (bound_box.Max.X - bound_box.Min.X) / 99 * i
+            y = bound_box.Min.Y + (bound_box.Max.Y - bound_box.Min.Y) / 99 * j
+            z = (bound_box.Min.Z + bound_box.Max.Z) / 2
+            point = rg.Point3d(x, y, z)
+            point = surf.ClosestPoint(point)
+            objects.append(rg.Point(point))
+    
     # Extend surface using Brep patch
-    extended_surf = rg.Brep.CreatePatch(Array[rg.GeometryBase]([extended_outline,
-        rg.Mesh.CreateFromBrep(surf)[0]]), None, 20, 20, False, True,
+    objects.append(extended_outline)
+    extended_surf = rg.Brep.CreatePatch(Array[rg.GeometryBase](objects),
+        None, 20, 20, False, True,
         extended_outline.GetLength() / 100, 50, 10, 
         Array[bool]([True, True, True, True]), tol)
     extended_surf = extended_surf.Surfaces[0]
