@@ -57,7 +57,7 @@ def split_path_on_off_surf(path, surf, extended_surf, spray_diameter):
         paths.extend(outside_curves[len(inside_curves):len(outside_curves)])
         on_surface.extend([False] * (len(outside_curves) - len(inside_curves)))
     elif (len(inside_curves) > len(outside_curves)):
-        paths.extend(outside_curves[len(outside_curves):len(inside_curves)])
+        paths.extend(inside_curves[len(outside_curves):len(inside_curves)])
         on_surface.extend([True] * (len(inside_curves) - len(outside_curves)))
 
     return [paths, on_surface]
