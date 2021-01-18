@@ -4,7 +4,7 @@ import System
 import Rhino
 import clr
 
-class ConnectPathsThroughBounds(component):
+class VisualiseSprayCircles(component):
     @property
     def Exposure(self):
         return Grasshopper.Kernel.GH_Exposure.quarternary
