@@ -24,6 +24,8 @@ def extend_surf(surf, plane):
     bounds = rg.Box(plane, surf.GetBoundingBox(plane))
     bounds = rg.Box(rotated_plane, bounds.GetCorners())
     bounds = rg.Box(plane, bounds.GetCorners())
+    bounds = rg.Box(rotated_plane, bounds.GetCorners())
+    bounds = rg.Box(plane, bounds.GetCorners())
     bounds_corners = bounds.GetCorners()
 
     # Find a boundary polyline curve to extend to
@@ -67,13 +69,19 @@ def offset_surf_bounds(surf, extended_surf, dist):
     tol = rd.ActiveDoc.ModelAbsoluteTolerance
 
     perim = rg.Curve.JoinCurves(surf.GetWireframe(-1), tol)[0]
+
+    if (dist == 0):
+        return perim
+    
     perim_length = perim.GetLength()
 
     # Offset curve
     bounds = perim.OffsetOnSurface(extended_surf, dist, tol)[0]
 
     # If the offset curve is shorter than surface perimeter, offset the other way
-    if (bounds.GetLength() < perim_length):
+    if (dist > 0 and bounds.GetLength() < perim_length):
+        bounds = perim.OffsetOnSurface(extended_surf, -dist, tol)[0]
+    elif (dist < 0 and bounds.GetLength() > perim_length):
         bounds = perim.OffsetOnSurface(extended_surf, -dist, tol)[0]
         
     return bounds
@@ -249,7 +257,7 @@ def polyline_centroid(polyline):
     '''
 
     # Explode to lines
-    exploded_outline = outline.DuplicateSegments()
+    exploded_outline = polyline.DuplicateSegments()
 
     # Find centroid
     area = 0
