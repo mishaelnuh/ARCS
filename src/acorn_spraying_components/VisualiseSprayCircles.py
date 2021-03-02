@@ -35,7 +35,7 @@ class VisualiseSprayCircles(component):
 
         p = Grasshopper.Kernel.Parameters.Param_Curve()
         self.SetUpParam(p, "path", "path", "Spray path.")
-        p.Access = Grasshopper.Kernel.GH_ParamAccess.item
+        p.Access = Grasshopper.Kernel.GH_ParamAccess.list
         self.Params.Input.Add(p)
 
         p = Grasshopper.Kernel.Parameters.Param_Number()
@@ -49,7 +49,7 @@ class VisualiseSprayCircles(component):
         self.Params.Output.Add(p)
     
     def SolveInstance(self, DA):
-        self.spray_circles = []
+        self.spray_circles = Grasshopper.DataTree[Rhino.Geometry.Circle]()
         self.bounding_box = Rhino.Geometry.BoundingBox()
 
         surf = self.marshal.GetInput(DA, 0)
@@ -58,25 +58,30 @@ class VisualiseSprayCircles(component):
         spray_diameter = self.marshal.GetInput(DA, 2)
         
         # Divide path to lengths of 10% of diameter
-        params = path.DivideByLength(spray_diameter * 0.1, True)
-        points = [path.PointAt(t) for t in params]
-        brep_point = [surf.ClosestPoint(p) for p in points]
-        surf_point = [surf_surf.ClosestPoint(p) for p in brep_point]
-        normals = [surf_surf.NormalAt(p[1], p[2]) for p in surf_point]
+        for i,p in enumerate(path):
+            params = p.DivideByLength(spray_diameter * 0.1, True)
+            points = [p.PointAt(t) for t in params]
+            brep_point = [surf.ClosestPoint(p) for p in points]
+            surf_point = [surf_surf.ClosestPoint(p) for p in brep_point]
+            normals = [surf_surf.NormalAt(p[1], p[2]) for p in surf_point]
 
-        # Get circles
-        self.spray_circles = [Rhino.Geometry.Circle(
-            Rhino.Geometry.Plane(z[0], z[1]), spray_diameter / 2) for z in zip(points, normals)]
+            # Get circles
+            circles = [Rhino.Geometry.Circle(
+                Rhino.Geometry.Plane(z[0], z[1]), spray_diameter / 2) for z in zip(points, normals)]
+            
+            self.spray_circles.AddRange(circles, Grasshopper.Kernel.Data.GH_Path(i))
+
+            # Get bounding box
+            for c in circles:
+                self.bounding_box.Union(c.BoundingBox)
         
-        # Get bounding box
-        for c in self.spray_circles:
-            self.bounding_box.Union(c.BoundingBox)
-
-        if len(self.spray_circles) > 0:
-            self.marshal.SetOutput(self.spray_circles, DA, 0, True)
+        self.marshal.SetOutput(self.spray_circles, DA, 0, True)
         
     def DrawViewportWires(self, args):
-        for c in self.spray_circles:
+        circle = self.spray_circles
+        circle.Flatten()
+        circle = circle.Branch(0)
+        for c in circle:
             args.Display.DrawCircle(c, System.Drawing.Color.Cyan)
 
     def get_ClippingBox(self):
