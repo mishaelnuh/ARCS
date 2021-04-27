@@ -44,20 +44,27 @@ namespace ACORNSpraying
             }).ToPolylineCurve();
 
             // Populate the Brep with 10000 points
-            var patchGeometries = new List<GeometryBase>();
+            var patchPoints = new List<Point3d>();
             var boundingBox = surf.GetBoundingBox(false);
+            var domU = surf.Surfaces[0].Domain(0);
+            var domV = surf.Surfaces[0].Domain(1);
             for (int i = 0; i < 100; i++)
             {
                 for (int j = 0; j < 100; j++)
                 {
-                    var point = new Point3d(
-                        boundingBox.Min.X + (boundingBox.Max.X - boundingBox.Min.X) / 99 * i,
-                        boundingBox.Min.Y + (boundingBox.Max.Y - boundingBox.Min.Y) / 99 * j,
-                        (boundingBox.Min.Z + boundingBox.Max.Z) / 2);
-                    point = surf.ClosestPoint(point);
-                    patchGeometries.Add(new Point(point));
+                    patchPoints.Add(surf.Surfaces[0].PointAt(
+                        domU.Min + (domU.Max - domU.Min) / 99 * i,
+                        domV.Min + (domV.Max - domV.Min) / 99 * j));
                 }
             }
+            var patchGeometries = Rhino.Geometry.Intersect.Intersection.ProjectPointsToBreps(
+                new List<Brep>() { surf },
+                patchPoints,
+                Vector3d.ZAxis,
+                ToleranceDistance)
+                .Where(p => p != null)
+                .Select(p => new Point(p) as GeometryBase)
+                .ToList();
 
             // Create surface using Brep patch
             patchGeometries.Add(extendedOutline);

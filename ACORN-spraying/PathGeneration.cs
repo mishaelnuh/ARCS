@@ -26,7 +26,7 @@ namespace ACORNSpraying
 
             // Ignore corners from offset surf boundary
             int skipOffset = 0;
-            if (dist > 0)
+            if (expandDist > 0)
             {
                 var testPoint = (surf.GetWireframe(-1)[0]).PointAtStart;
                 var midPoints = new PointCloud(edges.Select(e => e.PointAtNormalizedLength(0.5)));
@@ -61,7 +61,7 @@ namespace ACORNSpraying
             var paths = new List<Curve>();
             for (int i = 0; i < angles.Count; i++)
             {
-                if (dist > 0 && (i + skipOffset) % 2 == 0)
+                if (expandDist > 0 && (i + skipOffset) % 2 == 0)
                     continue;
 
                 // Define planes and 90 deg rotated plane
@@ -231,6 +231,12 @@ namespace ACORNSpraying
         /// <returns>Equally spaced isolines generated.</returns>
         public static List<Curve> OrthoGeodesics(List<Curve> geodesics, Curve guide, double dist)
         {
+            var geoBounds = new BoundingBox();
+            foreach (var g in geodesics)
+                geoBounds.Union(g.GetBoundingBox(false));
+
+            guide = guide.Extend(CurveEnd.Both, geoBounds.Diagonal.Length / 2, CurveExtensionStyle.Line);
+
             var startParams = geodesics.Select(g =>
                 {
                     Point3d p;
@@ -246,9 +252,15 @@ namespace ACORNSpraying
 
             for (int i = 0; i < startParams.Count; i++)
             {
-                geodesicCut0.Add(geodesics[i].Trim(geodesics[i].Domain.Min, startParams[i]));
+                var curve0 = geodesics[i].Trim(geodesics[i].Domain.Min, startParams[i]);
+                if (curve0 == null)
+                    continue;
+                var curve1 = geodesics[i].Trim(startParams[i], geodesics[i].Domain.Max);
+                if (curve1 == null)
+                    continue;
+                geodesicCut0.Add(curve0);
                 geodesicCut0[i].Reverse();
-                geodesicCut1.Add(geodesics[i].Trim(startParams[i], geodesics[i].Domain.Max));
+                geodesicCut1.Add(curve1);
             }
 
             var orthoCut0 = OrthoGeodesics(geodesicCut0, dist);
