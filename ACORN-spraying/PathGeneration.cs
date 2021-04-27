@@ -10,7 +10,7 @@ namespace ACORNSpraying
 {
     public static class PathGeneration
     {
-        public static List<Curve> SprayPaths(Brep surf, Surface extSurf, double dist, double expandDist)
+        public static List<Curve> SprayPaths(Brep surf, Surface extSurf, double dist, double expandDist, int numGeo)
         {
             // Find direction of spray paths to be used
             var boundary = OffsetSurfBoundary(surf, extSurf, expandDist);
@@ -22,6 +22,17 @@ namespace ACORNSpraying
             else if (boundary is PolyCurve)
             {
                 edges = (boundary as PolyCurve).Explode().ToList();
+            }
+
+            // Ignore corners from offset surf boundary
+            int skipOffset = 0;
+            if (dist > 0)
+            {
+                var testPoint = (surf.GetWireframe(-1)[0]).PointAtStart;
+                var midPoints = new PointCloud(edges.Select(e => e.PointAtNormalizedLength(0.5)));
+                var closestIndex = midPoints.ClosestPoint(testPoint);
+                if (closestIndex % 2 == 1)
+                    skipOffset = 1;
             }
 
             var angles = edges
@@ -50,18 +61,21 @@ namespace ACORNSpraying
             var paths = new List<Curve>();
             for (int i = 0; i < angles.Count; i++)
             {
+                if (dist > 0 && (i + skipOffset) % 2 == 0)
+                    continue;
+
                 // Define planes and 90 deg rotated plane
                 var plane = Plane.WorldYZ;
                 plane.Rotate(angles[i], Vector3d.ZAxis);
 
                 // Find geodesics
-                var geodesicsCurves = Geodesics(surf, extSurf, plane, 10);
+                var geodesicsCurves = Geodesics(surf, extSurf, plane, numGeo);
 
                 // Calculate ortho geodesic isolines
                 var path = OrthoGeodesics(geodesicsCurves, edges[i], dist);
 
                 // Filter curves
-                path = FilterCurvesByDistToSurf(path, surf, dist / 2);
+                path = FilterCurvesByDistToSurf(path, surf, dist / 2 + Math.Abs(expandDist));
 
                 // Pull paths to surface and trim
                 path = path
@@ -76,17 +90,23 @@ namespace ACORNSpraying
                     .ToList();
 
                 // Replace the curve closest to the edge with the edge itself
-                int matchIndex;
-                edges[i].ClosestPoints(path, out _, out _, out matchIndex);
-                if (path[matchIndex].PointAtStart.DistanceToSquared(edges[i].PointAtStart) < path[matchIndex].PointAtStart.DistanceToSquared(edges[i].PointAtEnd))
+                var flag = true;
+                do
                 {
-                    path[matchIndex] = edges[i].Duplicate() as Curve;
-                }
-                else
-                {
-                    path[matchIndex] = edges[i].Duplicate() as Curve;
-                    path[matchIndex].Reverse();
-                }
+                    int matchIndex;
+                    Point3d p1, p2;
+                    edges[i].ClosestPoints(path, out p1, out p2, out matchIndex);
+                    if (p1.DistanceToSquared(p2) < dist * dist / 4)
+                        path.RemoveAt(matchIndex);
+                    else
+                        flag = false;
+                } while (flag);
+
+                // Insert edge curve
+                path.Insert(0, edges[i]);
+
+                if (path[0].PointAtStart.DistanceToSquared(path[1].PointAtStart) > path[0].PointAtStart.DistanceToSquared(path[1].PointAtEnd))
+                    path[0].Reverse();
 
                 // Connect paths together through the bounds
                 for (int j = 0; j < path.Count; j += 2)
@@ -174,8 +194,16 @@ namespace ACORNSpraying
         /// <returns>Equally spaced isolines generated.</returns>
         public static List<Curve> OrthoGeodesics(List<Curve> geodesics, double dist)
         {
-            var tParams = geodesics.Select(g => g.DivideByLength(dist, true)).ToList();
-            
+            var tParams = geodesics
+                .Select(g => g.DivideByLength(dist, true))
+                .ToList();
+
+            for(int i = 0; i < tParams.Count; i++)
+            {
+                if (tParams[i] == null || tParams[i].Count() == 0)
+                    tParams[i] = new double[] { geodesics[i].Domain.Min };
+            }
+
             var points = new List<List<Point3d>>();
             var minLength = tParams.Select(l => l.Length).Min();
 

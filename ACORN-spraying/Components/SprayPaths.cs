@@ -21,6 +21,7 @@ namespace ACORNSpraying
             pManager.AddSurfaceParameter("extSurf", "extSurf", "Extended surface. Use ExtendSurf or untrim the Brep.", GH_ParamAccess.item);
             pManager.AddNumberParameter("dist", "dist", "Distance between path lines.", GH_ParamAccess.item);
             pManager.AddNumberParameter("expandDist", "expandDist", "Length to extend path lines past surface bounds.", GH_ParamAccess.item);
+            pManager.AddNumberParameter("numGeo", "numGeo", "Number of geodesics to calculate paths from.", GH_ParamAccess.item);
         }
 
         protected override void RegisterOutputParams(GH_Component.GH_OutputParamManager pManager)
@@ -34,13 +35,15 @@ namespace ACORNSpraying
             Surface extSurf = null;
             double dist = 0;
             double expandDist = 0;
+            double numGeo = 0;
 
             DA.GetData(0, ref surf);
             DA.GetData(1, ref extSurf);
             DA.GetData(2, ref dist);
             DA.GetData(3, ref expandDist);
+            DA.GetData(4, ref numGeo);
 
-            var res = SprayPaths(surf, extSurf, dist, expandDist);
+            var res = SprayPaths(surf, extSurf, dist, expandDist, (int)numGeo);
 
             DA.SetDataList(0, res);
         }
