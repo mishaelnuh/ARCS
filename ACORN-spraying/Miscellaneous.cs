@@ -84,7 +84,12 @@ namespace ACORNSpraying
         /// <returns>Offset surface bound curve.</returns>
         public static Curve OffsetSurfBoundary(Brep surf, Surface extSurf, double dist)
         {
-            var perim = Curve.JoinCurves(surf.GetWireframe(-1), ToleranceDistance)[0];
+            var loops = surf.Loops.Select(l => l.To3dCurve()).Where(l => l != null).ToList();
+
+            if (loops.Count == 0)
+                throw new Exception("Unable to get Brep boundary.");
+
+            var perim = Curve.JoinCurves(surf.Loops.Select(l => l.To3dCurve()), ToleranceDistance)[0];
 
             if (dist == 0)
                 return perim;

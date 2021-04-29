@@ -8,8 +8,10 @@ namespace ACORNSpraying
 {
     public class ExtendSurf : GH_Component
     {
+        public override GH_Exposure Exposure { get => GH_Exposure.secondary; }
+
         public ExtendSurf()
-          : base("ExtendSurf", "ACORN_ExtendSurf",
+          : base("Extend Surface", "ACORN_ExtendSurf",
               "Extends a surface using consecutive bounding boxes.",
               "ACORN", "Spraying")
         {
@@ -18,7 +20,9 @@ namespace ACORNSpraying
         protected override void RegisterInputParams(GH_Component.GH_InputParamManager pManager)
         {
             pManager.AddBrepParameter("surf", "surf", "Surface to extend. Input as Brep in order to maintain trims.", GH_ParamAccess.item);
-            pManager.AddPlaneParameter("plane", "plane", "Plane to orient extended surface borders to.", GH_ParamAccess.item);
+            pManager.AddPlaneParameter("plane", "plane", "Plane to orient extended surface borders to.", GH_ParamAccess.item, Plane.WorldYZ);
+
+            pManager[1].Optional = true;
         }
 
         protected override void RegisterOutputParams(GH_Component.GH_OutputParamManager pManager)

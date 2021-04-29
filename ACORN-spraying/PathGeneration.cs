@@ -10,8 +10,12 @@ namespace ACORNSpraying
 {
     public static class PathGeneration
     {
-        public static List<Curve> SprayPaths(Brep surf, Surface extSurf, double dist, double expandDist, int numGeo)
+        public static List<Curve> SprayInnerPaths(Brep surf, Surface extSurf, double dist, double expandDist, int numGeo,
+            out List<List<Curve>> segments, out List<List<bool>> isConnector)
         {
+            segments = new List<List<Curve>>();
+            isConnector = new List<List<bool>>();
+
             // Find direction of spray paths to be used
             var boundary = OffsetSurfBoundary(surf, extSurf, expandDist);
             List<Curve> edges = new List<Curve>();
@@ -28,7 +32,12 @@ namespace ACORNSpraying
             int skipOffset = 0;
             if (expandDist > 0)
             {
-                var testPoint = (surf.GetWireframe(-1)[0]).PointAtStart;
+                var loops = surf.Loops.Select(l => l.To3dCurve()).Where(l => l != null).ToList();
+
+                if (loops.Count == 0)
+                    throw new Exception("Unable to get Brep boundary.");
+
+                var testPoint = loops.First().PointAtStart;
                 var midPoints = new PointCloud(edges.Select(e => e.PointAtNormalizedLength(0.5)));
                 var closestIndex = midPoints.ClosestPoint(testPoint);
                 if (closestIndex % 2 == 1)
@@ -112,7 +121,17 @@ namespace ACORNSpraying
                 for (int j = 0; j < path.Count; j += 2)
                     path[j].Reverse();
 
-                paths.Add(ConnectGeometriesThroughBoundary(path.Cast<GeometryBase>().ToList(), boundary, out _));
+                List<Curve> tmp1;
+                List<bool> tmp2;
+                var connectedPath = ConnectGeometriesThroughBoundary(
+                    path.Cast<GeometryBase>().ToList(),
+                    Enumerable.Repeat(false, path.Count).ToList(),
+                    boundary,
+                    out tmp1, out tmp2);
+
+                segments.Add(tmp1);
+                isConnector.Add(tmp2);
+                paths.Add(connectedPath);
             }
 
             return paths;
@@ -277,28 +296,34 @@ namespace ACORNSpraying
         /// Connects geometries using sub curves of the bounds.
         /// </summary>
         /// <param name="geometries">Geometries to connect. Only curves and points.</param>
+        /// <param name="isGeometryConnector">Flag to show whether original geometry is a connector. Should be same length as the geometries list.</param>
         /// <param name="surf">Surface to offset border from. Input as Brep in order to maintain trims.</param>
         /// <param name="extSurf">Surface to extend border on.</param>
         /// <param name="dist">Distance to offset by.</param>
-        /// <param name="isConnectorSegment">Flags to show which PolyCurve segments are connectors.</param>
+        /// <param name="segments">Curve segments exploded.</param>
+        /// <param name="isConnectorSegment">Flags to show which segments are connectors.</param>
         /// <returns>Connected curve passing through geometries.</returns>
-        public static Curve ConnectGeometriesThroughBoundary(List<GeometryBase> geometries, Brep surf, Surface extSurf, double dist, out List<bool> isConnectorSegment)
+        public static Curve ConnectGeometriesThroughBoundary(List<GeometryBase> geometries, List<bool> isGeometryConnector, Brep surf, Surface extSurf, double dist,
+            out List<Curve> segments, out List<bool> isConnectorSegment)
         {
             var boundary = OffsetSurfBoundary(surf, extSurf, dist);
-            return ConnectGeometriesThroughBoundary(geometries, boundary, out isConnectorSegment);
+            return ConnectGeometriesThroughBoundary(geometries, isGeometryConnector, boundary, out segments, out isConnectorSegment);
         }
 
         /// <summary>
         /// Connects geometries using sub curves of the bounds.
         /// </summary>
         /// <param name="geometries">Geometries to connect. Only curves and points.</param>
+        /// <param name="isGeometryConnector">Flag to show whether original geometry is a connector. Should be same length as the geometries list.</param>
         /// <param name="boundary">Closed boundary curve to use as connectors.</param>
-        /// <param name="isConnectorSegment">Flags to show which PolyCurve segments are connectors.</param>
+        /// <param name="segments">Curve segments exploded.</param>
+        /// <param name="isConnectorSegment">Flags to show which segments are connectors.</param>
         /// <returns>Connected curve passing through geometries.</returns>
-        public static Curve ConnectGeometriesThroughBoundary(List<GeometryBase> geometries, Curve boundary, out List<bool> isConnectorSegment)
+        public static Curve ConnectGeometriesThroughBoundary(List<GeometryBase> geometries, List<bool> isGeometryConnector, Curve boundary,
+            out List<Curve> segments, out List<bool> isConnectorSegment)
         {
-            var connectedGeometries = new PolyCurve();
             isConnectorSegment = new List<bool>();
+            segments = new List<Curve>();
 
             for (int i = 0; i < geometries.Count - 1; i++)
             {
@@ -306,8 +331,8 @@ namespace ACORNSpraying
 
                 if (typeof(Curve).IsAssignableFrom(geometries[i].GetType()))
                 {
-                    connectedGeometries.Append(geometries[i] as Curve);
-                    isConnectorSegment.Add(false);
+                    segments.Add(geometries[i] as Curve);
+                    isConnectorSegment.Add(isGeometryConnector[i]);
                     pEnd = (geometries[i] as Curve).PointAtEnd;
                 }
                 else if (geometries[i].GetType() == typeof(Point))
@@ -319,10 +344,13 @@ namespace ACORNSpraying
                 {
                     pNext = (geometries[i + 1] as Curve).PointAtStart;
                 }
-                else if (geometries[i].GetType() == typeof(Point))
+                else if (geometries[i + 1].GetType() == typeof(Point))
                     pNext = (geometries[i + 1] as Point).Location;
                 else
                     throw new Exception("Only curves and points supported.");
+
+                if (pEnd.DistanceToSquared(pNext) < ToleranceDistance * ToleranceDistance)
+                    continue;
 
                 double boundaryParamEnd, boundaryParamNext;
                 boundary.ClosestPoint(pEnd, out boundaryParamEnd);
@@ -330,28 +358,32 @@ namespace ACORNSpraying
 
                 var connector = ShortestSubcurve(boundary, boundaryParamEnd, boundaryParamNext);
 
-                if (pEnd.DistanceTo(connector.PointAtStart) > ToleranceDistance)
+                if (pEnd.DistanceToSquared(connector.PointAtStart) > ToleranceDistance * ToleranceDistance)
                 {
-                    connectedGeometries.Append(new Line(pEnd, connector.PointAtStart));
+                    segments.Add(new LineCurve(pEnd, connector.PointAtStart));
                     isConnectorSegment.Add(true);
                 }
                 if (connector.GetLength() > ToleranceDistance)
                 {
-                    connectedGeometries.Append(connector);
+                    segments.Add(connector);
                     isConnectorSegment.Add(true);
                 }
-                if (pNext.DistanceTo(connector.PointAtEnd) > ToleranceDistance)
+                if (pNext.DistanceToSquared(connector.PointAtEnd) > ToleranceDistance * ToleranceDistance)
                 {
-                    connectedGeometries.Append(new Line(connector.PointAtEnd, pNext));
+                    segments.Add(new LineCurve(connector.PointAtEnd, pNext));
                     isConnectorSegment.Add(true);
                 }
             }
 
             if (typeof(Curve).IsAssignableFrom(geometries.Last().GetType()))
             {
-                connectedGeometries.Append(geometries.Last() as Curve);
-                isConnectorSegment.Add(false);
+                segments.Add(geometries.Last() as Curve);
+                isConnectorSegment.Add(isGeometryConnector.Last());
             }
+
+            var connectedGeometries = new PolyCurve();
+            foreach(var s in segments)
+                connectedGeometries.Append(s);
 
             return connectedGeometries;
         }

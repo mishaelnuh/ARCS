@@ -56,7 +56,7 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Components\SprayPaths.cs" />
+    <Compile Include="Components\SprayInnerPaths.cs" />
     <Compile Include="Components\ConnectPathsThroughBoundary.cs" />
     <Compile Include="Components\ExtendSurf.cs" />
     <Compile Include="ACORNSprayingInfo.cs" />
