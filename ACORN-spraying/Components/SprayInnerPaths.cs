@@ -4,6 +4,7 @@ using Grasshopper.Kernel.Data;
 using Rhino.Geometry;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using static ACORNSpraying.PathGeneration;
 
 namespace ACORNSpraying
@@ -34,8 +35,8 @@ namespace ACORNSpraying
         protected override void RegisterOutputParams(GH_Component.GH_OutputParamManager pManager)
         {
             pManager.AddCurveParameter("paths", "paths", "Spray paths.", GH_ParamAccess.list);
-            pManager.AddCurveParameter("segments", "segments", "Curve segments.", GH_ParamAccess.tree);
-            pManager.AddBooleanParameter("isConnector", "isConnector", "Flags to see if curve segment is a connector.", GH_ParamAccess.tree);
+            pManager.AddCurveParameter("segments", "segments", "Flattened list of curve segments.", GH_ParamAccess.list);
+            pManager.AddBooleanParameter("isConnector", "isConnector", "Flags to see if curve segment is a connector.", GH_ParamAccess.list);
         }
 
         protected override void SolveInstance(IGH_DataAccess DA)
@@ -56,22 +57,9 @@ namespace ACORNSpraying
             List<List<bool>> isConnector;
             var res = SprayInnerPaths(surf, extSurf, dist, expandDist, (int)numGeo, out segments, out isConnector);
 
-            var branchIndex = DA.ParameterTargetIndex(0);
-
-            var segmentTree = new DataTree<Curve>();
-            
-            for (int i = 0; i < segments.Count; i++)
-            {
-                segmentTree.AddRange(segments[i], DA.ParameterTargetPath(1).AppendElement(branchIndex).AppendElement(i));
-            }
-
-            var isConnectorTree = new DataTree<bool>();
-            for (int i = 0; i < isConnector.Count; i++)
-                isConnectorTree.AddRange(isConnector[i], DA.ParameterTargetPath(2).AppendElement(branchIndex).AppendElement(i));
-
             DA.SetDataList(0, res);
-            DA.SetDataTree(1, segmentTree);
-            DA.SetDataTree(2, isConnectorTree);
+            DA.SetDataList(1, segments.SelectMany(x => x).ToList());
+            DA.SetDataList(2, isConnector.SelectMany(x => x).ToList());
         }
 
         protected override System.Drawing.Bitmap Icon

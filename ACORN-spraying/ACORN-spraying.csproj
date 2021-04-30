@@ -56,6 +56,8 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Components\PathCombiner.cs" />
+    <Compile Include="Components\SprayEdgePath.cs" />
     <Compile Include="Components\SprayInnerPaths.cs" />
     <Compile Include="Components\ConnectPathsThroughBoundary.cs" />
     <Compile Include="Components\ExtendSurf.cs" />

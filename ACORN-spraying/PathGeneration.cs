@@ -32,12 +32,12 @@ namespace ACORNSpraying
             int skipOffset = 0;
             if (expandDist > 0)
             {
-                var loops = surf.Loops.Select(l => l.To3dCurve()).Where(l => l != null).ToList();
+                var perim = surf.Boundary();
 
-                if (loops.Count == 0)
+                if (perim == null)
                     throw new Exception("Unable to get Brep boundary.");
 
-                var testPoint = loops.First().PointAtStart;
+                var testPoint = perim.PointAtStart;
                 var midPoints = new PointCloud(edges.Select(e => e.PointAtNormalizedLength(0.5)));
                 var closestIndex = midPoints.ClosestPoint(testPoint);
                 if (closestIndex % 2 == 1)
@@ -135,6 +135,18 @@ namespace ACORNSpraying
             }
 
             return paths;
+        }
+
+        public static Curve SprayEdgePath(Brep surf, Point3d startP)
+        {
+            var perim = surf.Boundary();
+
+            double t;
+            perim.ClosestPoint(startP, out t);
+
+            perim.ChangeClosedCurveSeam(t);
+
+            return perim;
         }
 
         /// <summary>
