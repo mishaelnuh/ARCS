@@ -98,6 +98,16 @@ namespace ACORNSpraying
                     })
                     .ToList();
 
+                // Align path order
+                Point3d pT1, pT2;
+                edges[i].ClosestPoints(new List<GeometryBase>() { path[0] }, out pT1, out pT2, out _);
+                var dist1 = pT1.DistanceToSquared(pT2);
+                edges[i].ClosestPoints(new List<GeometryBase>() { path.Last() }, out pT1, out pT2, out _);
+                var dist2 = pT1.DistanceToSquared(pT2);
+
+                if (dist2 < dist1)
+                    path.Reverse();
+
                 // Replace the curve closest to the edge with the edge itself
                 var flag = true;
                 do
