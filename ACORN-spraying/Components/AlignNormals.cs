@@ -73,6 +73,7 @@ namespace ACORNSpraying
             double u, v;
             surf.Surfaces[0].ClosestPoint(point, out u, out v);
             var surfNorm = surf.Surfaces[0].NormalAt(u, v);
+            surfNorm.Unitize();
 
             if (surfNorm.Z > 0)
                 surfNorm.Reverse();
@@ -113,10 +114,16 @@ namespace ACORNSpraying
             }
             else
             {
+                finalNorm += surfNorm;
                 foreach (var n in normalVecs)
+                {
                     finalNorm += n;
+                    finalNorm -= surfNorm;
+                }
                 finalNorm.Unitize();
             }
+
+            finalNorm.Unitize();
 
             DA.SetData(0, finalNorm);
         }
