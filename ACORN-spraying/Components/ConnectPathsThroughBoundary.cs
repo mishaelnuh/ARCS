@@ -23,12 +23,14 @@ namespace ACORNSpraying
         {
             pManager.AddGeometryParameter("geometries", "geometries", "Geometries to connect. Only curves and points.", GH_ParamAccess.list);
             pManager.AddBooleanParameter("isConnector", "isConnector", "Flag to show whether geometry is a connector. Should be same length as the geometries list.", GH_ParamAccess.list);
+            pManager.AddBooleanParameter("maintainDir", "maintainDir", "Maintain or flip curve directions.", GH_ParamAccess.item, false);
             pManager.AddBrepParameter("surf", "surf", "Surface to extend. Input as Brep in order to maintain trims.", GH_ParamAccess.item);
             pManager.AddSurfaceParameter("extSurf", "extSurf", "Extended surface. Use ExtendSurf or untrim the Brep.", GH_ParamAccess.item);
             pManager.AddNumberParameter("expandDist", "expandDist", "Length to extend path lines past surface bounds.", GH_ParamAccess.item, 0);
 
             pManager[1].Optional = true;
-            pManager[3].Optional = true;
+            pManager[2].Optional = true;
+            pManager[5].Optional = true;
         }
 
         protected override void RegisterOutputParams(GH_Component.GH_OutputParamManager pManager)
@@ -42,15 +44,17 @@ namespace ACORNSpraying
         {
             List<object> geometries = new List<object>();
             List<bool> isGeoConnector = new List<bool>();
+            bool maintainDir = false;
             Brep surf = null;
             Surface extSurf = null;
             double expandDist = 0;
 
             DA.GetDataList(0, geometries);
             DA.GetDataList(1, isGeoConnector);
-            DA.GetData(2, ref surf);
-            DA.GetData(3, ref extSurf);
-            DA.GetData(4, ref expandDist);
+            DA.GetData(2, ref maintainDir);
+            DA.GetData(3, ref surf);
+            DA.GetData(4, ref extSurf);
+            DA.GetData(5, ref expandDist);
 
             var castedGeometries = new List<GeometryBase>();
             foreach (var g in geometries)
@@ -77,7 +81,7 @@ namespace ACORNSpraying
 
             List<Curve> segments;
             List<bool> isResConnector;
-            var res = ConnectGeometriesThroughBoundary(castedGeometries, isGeoConnector, surf, extSurf, expandDist, out segments, out isResConnector);
+            var res = ConnectGeometriesThroughBoundary(castedGeometries, isGeoConnector, surf, extSurf, expandDist, maintainDir, out segments, out isResConnector);
 
             DA.SetData(0, res);
             DA.SetDataList(1, segments);

@@ -27,6 +27,8 @@ namespace ACORNSpraying
             pManager.AddCurveParameter("iSegments", "iSegments", "Spray path of inner.", GH_ParamAccess.list);
             pManager.AddBooleanParameter("iIsConnector", "iIsConnector", "Flags to see if inner curve segment is a connector.", GH_ParamAccess.list);
             pManager.AddPointParameter("endP", "endP", "End point of spray path.", GH_ParamAccess.item, Point3d.Unset);
+            
+            pManager.AddBooleanParameter("maintainDir", "maintainDir", "Maintain or flip curve directions.", GH_ParamAccess.item, false);
 
             pManager.AddBrepParameter("surf", "surf", "Surface to extend. Input as Brep in order to maintain trims.", GH_ParamAccess.item);
             pManager.AddSurfaceParameter("extSurf", "extSurf", "Extended surface. Use ExtendSurf or untrim the Brep.", GH_ParamAccess.item);
@@ -37,15 +39,15 @@ namespace ACORNSpraying
 
             pManager[0].Optional = true;
             pManager[4].Optional = true;
-            pManager[8].Optional = true;
+            pManager[5].Optional = true;
             pManager[9].Optional = true;
+            pManager[10].Optional = true;
         }
 
         protected override void RegisterOutputParams(GH_Component.GH_OutputParamManager pManager)
         {
             pManager.AddCurveParameter("segments", "segments", "Segmented spray path.", GH_ParamAccess.list);
             pManager.AddBooleanParameter("isConnector", "isConnector", "Flags to see if curve segment is a connector.", GH_ParamAccess.list);
-            pManager.AddNumberParameter("edgeIndices", "edgeIndices", "Indices of edge path segment.", GH_ParamAccess.list);
         }
 
         protected override void SolveInstance(IGH_DataAccess DA)
@@ -55,6 +57,8 @@ namespace ACORNSpraying
             List<Curve> iSegment = new List<Curve>();
             List<bool> iIsConnector = new List<bool>();
             Point3d endP = new Point3d();
+
+            bool maintainDir = false;
 
             Brep surf = null;
             Surface extSurf = null;
@@ -69,12 +73,14 @@ namespace ACORNSpraying
             DA.GetDataList(3, iIsConnector);
             DA.GetData(4, ref endP);
 
-            DA.GetData(5, ref surf);
-            DA.GetData(6, ref extSurf);
-            DA.GetData(7, ref expandDist);
+            DA.GetData(5, ref maintainDir);
 
-            DA.GetData(8, ref numELayer);
-            DA.GetData(9, ref numILayer);
+            DA.GetData(6, ref surf);
+            DA.GetData(7, ref extSurf);
+            DA.GetData(8, ref expandDist);
+
+            DA.GetData(9, ref numELayer);
+            DA.GetData(10, ref numILayer);
 
             var segments = new List<Curve>();
             var isConnector = new List<bool>();
@@ -92,7 +98,6 @@ namespace ACORNSpraying
                 segments.Add(ePath);
                 isConnector.Add(false);
             }
-            var edgeIndices = Enumerable.Range(1, (int)numELayer).ToList();
 
             // Add connector from edge path to inner path
             List<Curve> tmpSegments;
@@ -105,6 +110,7 @@ namespace ACORNSpraying
                 },
                 Enumerable.Repeat(true, 2).ToList(),
                 surf, extSurf, expandDist,
+                maintainDir,
                 out tmpSegments, out tmpFlags);
 
             segments.AddRange(tmpSegments);
@@ -118,6 +124,7 @@ namespace ACORNSpraying
                 iSegment.Cast<GeometryBase>().ToList(),
                 iIsConnector,
                 surf, extSurf, expandDist,
+                maintainDir,
                 out tmpSegments, out tmpFlags);
 
             for (int i = 0; i < numILayer; i++)
@@ -146,14 +153,14 @@ namespace ACORNSpraying
                 },
                 Enumerable.Repeat(true, 2).ToList(),
                 surf, extSurf, 0,
-                out tmpSegments, out tmpFlags);
+                maintainDir,
+                out tmpSegments, out tmpFlags);;
 
             segments.AddRange(tmpSegments);
             isConnector.AddRange(tmpFlags);
 
             DA.SetDataList(0, segments);
             DA.SetDataList(1, isConnector);
-            DA.SetDataList(2, edgeIndices);
         }
 
         protected override System.Drawing.Bitmap Icon

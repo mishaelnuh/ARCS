@@ -137,6 +137,7 @@ namespace ACORNSpraying
                     path.Cast<GeometryBase>().ToList(),
                     Enumerable.Repeat(false, path.Count).ToList(),
                     boundary,
+                    false,
                     out tmp1, out tmp2);
 
                 segments.Add(tmp1);
@@ -322,14 +323,15 @@ namespace ACORNSpraying
         /// <param name="surf">Surface to offset border from. Input as Brep in order to maintain trims.</param>
         /// <param name="extSurf">Surface to extend border on.</param>
         /// <param name="dist">Distance to offset by.</param>
+        /// <param name="maintainDir">Whether to maintain or flip curve directions.</param>
         /// <param name="segments">Curve segments exploded.</param>
         /// <param name="isConnectorSegment">Flags to show which segments are connectors.</param>
         /// <returns>Connected curve passing through geometries.</returns>
         public static Curve ConnectGeometriesThroughBoundary(List<GeometryBase> geometries, List<bool> isGeometryConnector, Brep surf, Surface extSurf, double dist,
-            out List<Curve> segments, out List<bool> isConnectorSegment)
+            bool maintainDir, out List<Curve> segments, out List<bool> isConnectorSegment)
         {
             var boundary = OffsetSurfBoundary(surf, extSurf, dist);
-            return ConnectGeometriesThroughBoundary(geometries, isGeometryConnector, boundary, out segments, out isConnectorSegment);
+            return ConnectGeometriesThroughBoundary(geometries, isGeometryConnector, boundary, maintainDir, out segments, out isConnectorSegment);
         }
 
         /// <summary>
@@ -338,10 +340,11 @@ namespace ACORNSpraying
         /// <param name="geometries">Geometries to connect. Only curves and points.</param>
         /// <param name="isGeometryConnector">Flag to show whether original geometry is a connector. Should be same length as the geometries list.</param>
         /// <param name="boundary">Closed boundary curve to use as connectors.</param>
+        /// <param name="maintainDir">Whether to maintain or flip curve directions.</param>
         /// <param name="segments">Curve segments exploded.</param>
         /// <param name="isConnectorSegment">Flags to show which segments are connectors.</param>
         /// <returns>Connected curve passing through geometries.</returns>
-        public static Curve ConnectGeometriesThroughBoundary(List<GeometryBase> geometries, List<bool> isGeometryConnector, Curve boundary,
+        public static Curve ConnectGeometriesThroughBoundary(List<GeometryBase> geometries, List<bool> isGeometryConnector, Curve boundary, bool maintainDir,
             out List<Curve> segments, out List<bool> isConnectorSegment)
         {
             isConnectorSegment = new List<bool>();
@@ -364,7 +367,25 @@ namespace ACORNSpraying
 
                 if (typeof(Curve).IsAssignableFrom(geometries[i + 1].GetType()))
                 {
-                    pNext = (geometries[i + 1] as Curve).PointAtStart;
+                    if (maintainDir)
+                    {
+                        pNext = (geometries[i + 1] as Curve).PointAtStart;
+                    }
+                    else
+                    {
+                        var p1 = (geometries[i + 1] as Curve).PointAtStart;
+                        var p2 = (geometries[i + 1] as Curve).PointAtEnd;
+
+                        if (p1.DistanceToSquared(pEnd) > p2.DistanceToSquared(pEnd))
+                        {
+                            (geometries[i + 1] as Curve).Reverse();
+                            pNext = p2;
+                        }
+                        else
+                        {
+                            pNext = p1;
+                        }
+                    }
                 }
                 else if (geometries[i + 1].GetType() == typeof(Point))
                     pNext = (geometries[i + 1] as Point).Location;
