@@ -61,6 +61,14 @@ namespace ACORNSpraying
             if (useDegrees)
                 angle *= Math.PI / 180;
 
+            // Get surface boundary
+            var pTest = surf.ClosestPoint(point);
+            if (pTest.DistanceToSquared(point) > ToleranceDistance * ToleranceDistance * 1e6)
+            {
+                DA.SetData(0, -Vector3d.ZAxis);
+                return;
+            }
+
             // Get normal of surface
             double u, v;
             surf.Surfaces[0].ClosestPoint(point, out u, out v);
