@@ -376,7 +376,7 @@ namespace ACORNSpraying
                         var p1 = (geometries[i + 1] as Curve).PointAtStart;
                         var p2 = (geometries[i + 1] as Curve).PointAtEnd;
 
-                        if (p1.DistanceToSquared(pEnd) > p2.DistanceToSquared(pEnd))
+                        if (p1.DistanceToSquared(pEnd) > p2.DistanceToSquared(pEnd) && p1.DistanceToSquared(p2) > ToleranceDistance * ToleranceDistance)
                         {
                             (geometries[i + 1] as Curve).Reverse();
                             pNext = p2;
