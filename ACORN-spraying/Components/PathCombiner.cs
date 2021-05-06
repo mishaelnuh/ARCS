@@ -23,9 +23,8 @@ namespace ACORNSpraying
         protected override void RegisterInputParams(GH_Component.GH_InputParamManager pManager)
         {
             pManager.AddPointParameter("startP", "startP", "Starting point of spray path.", GH_ParamAccess.item, Point3d.Unset);
-            pManager.AddCurveParameter("ePath", "ePath", "Spray path of edge.", GH_ParamAccess.item);
-            pManager.AddCurveParameter("iSegments", "iSegments", "Spray path of inner.", GH_ParamAccess.list);
-            pManager.AddBooleanParameter("iIsConnector", "iIsConnector", "Flags to see if inner curve segment is a connector.", GH_ParamAccess.list);
+            pManager.AddCurveParameter("segments", "segments", "Spray segments.", GH_ParamAccess.list);
+            pManager.AddBooleanParameter("isConnector", "isConnector", "Flags to see if segment is a connector.", GH_ParamAccess.list);
             pManager.AddPointParameter("endP", "endP", "End point of spray path.", GH_ParamAccess.item, Point3d.Unset);
             
             pManager.AddBooleanParameter("maintainDir", "maintainDir", "Maintain or flip curve directions.", GH_ParamAccess.item, false);
@@ -34,14 +33,12 @@ namespace ACORNSpraying
             pManager.AddSurfaceParameter("extSurf", "extSurf", "Extended surface. Use ExtendSurf or untrim the Brep.", GH_ParamAccess.item);
             pManager.AddNumberParameter("expandDist", "expandDist", "Length to extend path lines past surface bounds.", GH_ParamAccess.item);
 
-            pManager.AddNumberParameter("numELayer", "numELayer", "Number of repeats of edge path.", GH_ParamAccess.item, 1);
-            pManager.AddNumberParameter("numILayer", "numILayer", "Number of repeats of inner path.", GH_ParamAccess.item, 1);
+            pManager.AddNumberParameter("numLayer", "numLayer", "Number of repeats for the path.", GH_ParamAccess.item, 1);
 
             pManager[0].Optional = true;
+            pManager[3].Optional = true;
             pManager[4].Optional = true;
-            pManager[5].Optional = true;
-            pManager[9].Optional = true;
-            pManager[10].Optional = true;
+            pManager[8].Optional = true;
         }
 
         protected override void RegisterOutputParams(GH_Component.GH_OutputParamManager pManager)
@@ -53,9 +50,8 @@ namespace ACORNSpraying
         protected override void SolveInstance(IGH_DataAccess DA)
         {
             Point3d startP = new Point3d();
-            Curve ePath = null;
-            List<Curve> iSegment = new List<Curve>();
-            List<bool> iIsConnector = new List<bool>();
+            List<Curve> segments = new List<Curve>();
+            List<bool> isConnector = new List<bool>();
             Point3d endP = new Point3d();
 
             bool maintainDir = false;
@@ -64,73 +60,68 @@ namespace ACORNSpraying
             Surface extSurf = null;
             double expandDist = 0;
 
-            double numELayer = 1;
-            double numILayer = 1;
+            double numLayer = 1;
 
             DA.GetData(0, ref startP);
-            DA.GetData(1, ref ePath);
-            DA.GetDataList(2, iSegment);
-            DA.GetDataList(3, iIsConnector);
-            DA.GetData(4, ref endP);
+            DA.GetDataList(1, segments);
+            DA.GetDataList(2, isConnector);
+            DA.GetData(3, ref endP);
 
-            DA.GetData(5, ref maintainDir);
+            DA.GetData(4, ref maintainDir);
 
-            DA.GetData(6, ref surf);
-            DA.GetData(7, ref extSurf);
-            DA.GetData(8, ref expandDist);
+            DA.GetData(5, ref surf);
+            DA.GetData(6, ref extSurf);
+            DA.GetData(7, ref expandDist);
 
-            DA.GetData(9, ref numELayer);
-            DA.GetData(10, ref numILayer);
+            DA.GetData(8, ref numLayer);
 
-            var segments = new List<Curve>();
-            var isConnector = new List<bool>();
+            var outputSegments = new List<Curve>();
+            var outputFlags = new List<bool>();
+
+            if (segments.Count == 0)
+                return;
 
             // Add line from start point to edge path
             if (startP.IsValid)
             {
-                segments.Add(new LineCurve(startP, ePath.PointAtStart));
-                isConnector.Add(true);
+                outputSegments.Add(new LineCurve(startP, segments.First().PointAtStart));
+                outputFlags.Add(true);
             }
 
-            // Add edge path
-            for (int i = 0; i < numELayer; i++)
-            {
-                segments.Add(ePath);
-                isConnector.Add(false);
-            }
-
-            // Add connector from edge path to inner path
+            // Add connected path
             List<Curve> tmpSegments;
             List<bool> tmpFlags;
-            ConnectGeometriesThroughBoundary(
+
+            var connectedPath = ConnectGeometriesThroughBoundary(
+                segments.Cast<GeometryBase>().ToList(),
+                isConnector,
+                surf, extSurf, expandDist,
+                maintainDir,
+                out tmpSegments, out tmpFlags);
+
+            List<Curve> tmpConnector;
+            List<bool> tmpConnectorFlag;
+
+            var layerConnector = ConnectGeometriesThroughBoundary(
                 new List<GeometryBase>()
                 {
-                    new Point(ePath.PointAtEnd),
-                    new Point(iSegment.First().PointAtStart)
+                    new Point(connectedPath.PointAtEnd),
+                    new Point(connectedPath.PointAtStart)
                 },
-                Enumerable.Repeat(true, 2).ToList(),
+                isConnector,
                 surf, extSurf, expandDist,
                 maintainDir,
-                out tmpSegments, out tmpFlags);
+                out tmpConnector, out tmpConnectorFlag);
 
-            segments.AddRange(tmpSegments);
-            isConnector.AddRange(tmpFlags);
-
-            // Add connected inner path
-            tmpSegments.Clear();
-            tmpFlags.Clear();
-
-            var connectedInnerPath = ConnectGeometriesThroughBoundary(
-                iSegment.Cast<GeometryBase>().ToList(),
-                iIsConnector,
-                surf, extSurf, expandDist,
-                maintainDir,
-                out tmpSegments, out tmpFlags);
-
-            for (int i = 0; i < numILayer; i++)
+            for (int i = 0; i < numLayer; i++)
             {
-                segments.AddRange(tmpSegments);
-                isConnector.AddRange(tmpFlags);
+                outputSegments.AddRange(tmpSegments);
+                outputFlags.AddRange(tmpFlags);
+                if (i < numLayer - 1)
+                {
+                    outputSegments.AddRange(tmpConnector);
+                    outputFlags.AddRange(tmpConnectorFlag);
+                }
             }
 
             // Add path from end of inner path to end point
@@ -139,7 +130,7 @@ namespace ACORNSpraying
                 if (startP.IsValid)
                     endP = startP;
                 else
-                    endP = ePath.PointAtStart;
+                    endP = segments.First().PointAtStart;
             }
 
             tmpSegments.Clear();
@@ -148,7 +139,7 @@ namespace ACORNSpraying
             ConnectGeometriesThroughBoundary(
                 new List<GeometryBase>()
                 {
-                    new Point(connectedInnerPath.PointAtEnd),
+                    new Point(connectedPath.PointAtEnd),
                     new Point(endP)
                 },
                 Enumerable.Repeat(true, 2).ToList(),
@@ -156,11 +147,11 @@ namespace ACORNSpraying
                 maintainDir,
                 out tmpSegments, out tmpFlags);;
 
-            segments.AddRange(tmpSegments);
-            isConnector.AddRange(tmpFlags);
+            outputSegments.AddRange(tmpSegments);
+            outputFlags.AddRange(tmpFlags);
 
-            DA.SetDataList(0, segments);
-            DA.SetDataList(1, isConnector);
+            DA.SetDataList(0, outputSegments);
+            DA.SetDataList(1, outputFlags);
         }
 
         protected override System.Drawing.Bitmap Icon
