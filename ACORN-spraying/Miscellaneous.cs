@@ -218,12 +218,25 @@ namespace ACORNSpraying
 
         public static Curve Boundary(this Brep brep)
         {
-            var loops = brep.Loops.Select(l => l.To3dCurve()).Where(l => l != null).ToList();
+            var loops = brep.GetWireframe(-1).Where(l => l != null).ToList();
 
             if (loops.Count == 0)
                 return null;
 
-            return Curve.JoinCurves(loops, ToleranceDistance)[0];
+            // Join curves in a loop increasing the tolerance if the curve isn't closed until it is
+            double factor = 1.0;
+            var curves = new Curve[0];
+            while (factor <= 100)
+            {
+                curves = Curve.JoinCurves(loops, ToleranceDistance * factor, false);
+                if (curves.Length == 1)
+                {
+                    if (curves[0].IsClosed)
+                        break;
+                }
+                factor += 1;
+            }
+            return curves[0];
         }
     }
 }
