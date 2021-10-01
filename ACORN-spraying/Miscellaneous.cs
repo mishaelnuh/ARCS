@@ -177,6 +177,60 @@ namespace ACORNSpraying
         }
 
         /// <summary>
+        /// Trim curve by a Brep surface.
+        /// </summary>
+        /// <param name="curve">Curve to trim.</param>
+        /// <param name="boundary">Brep surface to trim with.</param>
+        /// <param name="insideCurves">Curves inside the boundary.</param>
+        /// <param name="outsideCurves">Curves outside the boundary.</param>
+        public static void TrimCurveSurface(Curve curve, Brep brep, out List<Curve> insideCurves, out List<Curve> outsideCurves)
+        {
+            var toleranceVec = new Vector3d(0, 0, ToleranceDistance);
+
+            // Get an extrusion to use as intersection Brep
+            var curveBounds = curve.GetBoundingBox(false);
+            var basePlane = new Plane(curveBounds.Min - 2 * toleranceVec, Vector3d.ZAxis);
+            var extrusionCurve = new LineCurve(basePlane.Origin, basePlane.Origin + Vector3d.ZAxis * (curveBounds.Max.Z - curveBounds.Min.Z + 4 * ToleranceDistance));
+            var extrusion = brep.Faces[0].CreateExtrusion(extrusionCurve, true);
+            extrusion.Translate(new Vector3d(0, 0, - 2 * ToleranceDistance));
+
+            // Get intersection parameters
+            var intersections = new List<double> { curve.Domain.Min };
+            var tmp = new double[0];
+            Rhino.Geometry.Intersect.Intersection.CurveBrep(
+                curve, extrusion, ToleranceDistance, ToleranceAngle, out tmp);
+            intersections.AddRange(tmp);
+            intersections.Add(curve.Domain.Max);
+            intersections = intersections.Distinct().ToList();
+            intersections.Sort();
+            
+            // Determine if inside of outside extrusion
+            insideCurves = new List<Curve>();
+            outsideCurves = new List<Curve>();
+
+            for (int i = 0; i < intersections.Count - 1; i++)
+            {
+                var c = curve.Trim(intersections[i], intersections[i + 1]);
+                if (extrusion.IsPointInside(c.PointAtNormalizedLength(0.5), ToleranceDistance, false))
+                    insideCurves.Add(c);
+                else
+                    outsideCurves.Add(c);
+            }
+
+            // Do check with a point outside extrusion and flip inside and outside depending on result
+            var checkPoint = new Point3d(curveBounds.Min.X - ToleranceDistance * 1e6, curveBounds.Min.Y - ToleranceDistance * 1e6, curveBounds.Min.Z - ToleranceDistance * 1e6);
+            if (extrusion.IsPointInside(checkPoint, ToleranceDistance, true))
+            {
+                var tmpList = outsideCurves;
+                outsideCurves = insideCurves;
+                insideCurves = tmpList;
+            }
+
+            outsideCurves = Curve.JoinCurves(outsideCurves).ToList();
+            insideCurves = Curve.JoinCurves(insideCurves).ToList();
+        }
+
+        /// <summary>
         /// Finds shortest subcurve in closed curve between parameters.
         /// </summary>
         /// <param name="curve">Closed curve.</param>
@@ -216,6 +270,11 @@ namespace ACORNSpraying
             }
         }
 
+        /// <summary>
+        /// Get boundary outline of Brep surface. Assumes no holes.
+        /// </summary>
+        /// <param name="brep">Brep to find outline of.</param>
+        /// <returns>Outline curve.</returns>
         public static Curve Boundary(this Brep brep)
         {
             var loops = brep.GetWireframe(-1).Where(l => l != null).ToList();

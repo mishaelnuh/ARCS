@@ -327,7 +327,8 @@ namespace ACORNSpraying
         /// <param name="segments">Curve segments exploded.</param>
         /// <param name="isConnectorSegment">Flags to show which segments are connectors.</param>
         /// <returns>Connected curve passing through geometries.</returns>
-        public static Curve ConnectGeometriesThroughBoundary(List<GeometryBase> geometries, List<bool> isGeometryConnector, Brep surf, Surface extSurf, double dist,
+        public static Curve ConnectGeometriesThroughBoundary(List<GeometryBase> geometries, List<bool> isGeometryConnector,
+            Brep surf, Surface extSurf, double dist,
             bool maintainDir, out List<Curve> segments, out List<bool> isConnectorSegment)
         {
             var boundary = OffsetSurfBoundary(surf, extSurf, dist);
@@ -344,7 +345,8 @@ namespace ACORNSpraying
         /// <param name="segments">Curve segments exploded.</param>
         /// <param name="isConnectorSegment">Flags to show which segments are connectors.</param>
         /// <returns>Connected curve passing through geometries.</returns>
-        public static Curve ConnectGeometriesThroughBoundary(List<GeometryBase> geometries, List<bool> isGeometryConnector, Curve boundary, bool maintainDir,
+        public static Curve ConnectGeometriesThroughBoundary(List<GeometryBase> geometries, List<bool> isGeometryConnector,
+            Curve boundary, bool maintainDir,
             out List<Curve> segments, out List<bool> isConnectorSegment)
         {
             isConnectorSegment = new List<bool>();
@@ -426,6 +428,139 @@ namespace ACORNSpraying
 
             var connectedGeometries = new PolyCurve();
             foreach(var s in segments)
+                connectedGeometries.Append(s);
+
+            return connectedGeometries;
+        }
+        
+        /// <summary>
+        /// Connect geometries starting from the first using closest neighbour consecutively.
+        /// </summary>
+        /// <param name="geometries">Geometries to connect. Only curves and points.</param>
+        /// <param name="maintainDir">Whether to maintain or flip curve directions.</param>
+        /// <param name="segments">Curve segments exploded.</param>
+        /// <param name="isConnectorSegment">Flags to show which segments are connectors.</param>
+        /// <returns></returns>
+        public static Curve ConnectGeometries(List<GeometryBase> geometries, bool maintainDir,
+            out List<Curve> segments, out List<bool> isConnectorSegment)
+        {
+            isConnectorSegment = new List<bool>();
+            segments = new List<Curve>();
+
+            // Create map of key points
+            // Skip fist one
+            var positions = new PointCloud();
+            var indexedGeometries = new List<int>();
+
+            for (int i = 1; i < geometries.Count; i++)
+            {
+                if (typeof(Curve).IsAssignableFrom(geometries[i].GetType()))
+                {
+                    var curve = (geometries[i] as Curve);
+                    positions.Add(curve.PointAtStart);
+                    indexedGeometries.Add(i);
+                    // Track a reversed curve by using negative indexes
+                    positions.Add(curve.PointAtEnd);
+                    indexedGeometries.Add(-i);
+                }
+                else if (geometries[i].GetType() == typeof(Point))
+                {
+                    positions.Add((geometries[i] as Point).Location);
+                    indexedGeometries.Add(i);
+                }
+                else
+                    throw new Exception("Only curves and points supported.");
+            }
+
+            // Loop through and find all connections
+            Point3d currentPosition = new Point3d();
+
+               
+            if (typeof(Curve).IsAssignableFrom(geometries[0].GetType()))
+            {
+                currentPosition = (geometries[0] as Curve).PointAtEnd;
+                segments.Add((geometries[0] as Curve));
+                isConnectorSegment.Add(false);
+            }
+            else if (geometries[0].GetType() == typeof(Point))
+            {
+                currentPosition = (geometries[0] as Point).Location;
+            }
+
+            while (indexedGeometries.Count > 0)
+            {
+                var closestIndex = positions.ClosestPoint(currentPosition);
+                var index = indexedGeometries[closestIndex];
+
+                Point3d nextPosition = new Point3d();
+                Point3d nextStart = new Point3d();
+                Curve nextCurve = null;
+
+                if (typeof(Curve).IsAssignableFrom(geometries[Math.Abs(index)].GetType()))
+                {
+                    var curve = geometries[Math.Abs(index)] as Curve;
+                    nextCurve = curve.DuplicateCurve();
+
+                    if (index < 0)
+                    {
+                        nextPosition = curve.PointAtStart;
+                        nextStart = curve.PointAtEnd;
+                        nextCurve.Reverse();
+                    }
+                    else
+                    {
+                        nextPosition = curve.PointAtEnd;
+                        nextStart = curve.PointAtStart;
+                    }
+                }
+                else if (geometries[Math.Abs(index)].GetType() == typeof(Point))
+                {
+                    nextPosition = (geometries[Math.Abs(index)] as Point).Location;
+                    nextStart = nextPosition;
+                }
+
+                // Add connector
+                if (nextStart.DistanceToSquared(currentPosition) > ToleranceDistance * ToleranceDistance)
+                {
+                    segments.Add(new LineCurve(currentPosition, nextStart));
+                    isConnectorSegment.Add(true);
+                }
+
+                if (nextCurve != null)
+                {
+                    // Add curve
+                    segments.Add(nextCurve);
+                    isConnectorSegment.Add(false);
+
+                    // Remove curves from map
+                    if (index < 0)
+                    {
+                        positions.RemoveAt(closestIndex);
+                        indexedGeometries.RemoveAt(closestIndex);
+                        positions.RemoveAt(closestIndex - 1);
+                        indexedGeometries.RemoveAt(closestIndex - 1);
+                    }
+                    else
+                    {
+                        positions.RemoveAt(closestIndex + 1);
+                        indexedGeometries.RemoveAt(closestIndex + 1);
+                        positions.RemoveAt(closestIndex);
+                        indexedGeometries.RemoveAt(closestIndex);
+                    }
+                }
+                else
+                {
+                    // Remove point from map
+                    positions.RemoveAt(closestIndex);
+                    indexedGeometries.RemoveAt(closestIndex);
+                }
+
+                currentPosition = nextPosition;
+            }
+
+            // Connect all segments
+            var connectedGeometries = new PolyCurve();
+            foreach (var s in segments)
                 connectedGeometries.Append(s);
 
             return connectedGeometries;
