@@ -2,6 +2,7 @@
 using Grasshopper.Kernel;
 using Grasshopper.Kernel.Data;
 using Rhino.Geometry;
+using Rhino.Geometry.Intersect;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -24,54 +25,147 @@ namespace ACORNSpraying
         {
             pManager.AddBrepParameter("surf", "surf", "Surface to extend. Input as Brep in order to maintain trims.", GH_ParamAccess.item);
             pManager.AddSurfaceParameter("extSurf", "extSurf", "Extended surface. Use ExtendSurf or untrim the Brep.", GH_ParamAccess.item);
-            pManager.AddBrepParameter("regionSurf", "regionSurf", "Region to spray on. Input as Brep in order to maintain trims.", GH_ParamAccess.item);
+            pManager.AddBrepParameter("topSurf", "topSurf", "Top surface to spray to. Input as Brep in order to maintain trims.", GH_ParamAccess.item);
             pManager.AddNumberParameter("dist", "dist", "Distance between path lines.", GH_ParamAccess.item);
             pManager.AddNumberParameter("expandDist", "expandDist", "Length to extend path lines past surface bounds.", GH_ParamAccess.item, 0);
+            pManager.AddNumberParameter("flowRate", "flowRate", "Volumetric flow rate.", GH_ParamAccess.item, 12 * 2000);
+            pManager.AddNumberParameter("spraySpeed", "spraySpeed", "On path spraying speed.", GH_ParamAccess.item, 350);
+            pManager.AddNumberParameter("spraySpeedConn", "spraySpeedConn", "Off path spraying speed.", GH_ParamAccess.item, 700);
             pManager.AddNumberParameter("numGeo", "numGeo", "Number of geodesics to calculate paths from.", GH_ParamAccess.item, 10);
 
-            pManager[2].Optional = true;
             pManager[4].Optional = true;
             pManager[5].Optional = true;
+            pManager[6].Optional = true;
+            pManager[7].Optional = true;
+            pManager[8].Optional = true;
         }
 
         protected override void RegisterOutputParams(GH_Component.GH_OutputParamManager pManager)
         {
             pManager.AddCurveParameter("paths", "paths", "Spray paths.", GH_ParamAccess.list);
-            pManager.AddCurveParameter("segments", "segments", "Flattened list of curve segments.", GH_ParamAccess.list);
-            pManager.AddBooleanParameter("isConnector", "isConnector", "Flags to see if curve segment is a connector.", GH_ParamAccess.list);
+            pManager.AddCurveParameter("segments", "segments", "Flattened list of curve segments.", GH_ParamAccess.tree);
+            pManager.AddBooleanParameter("isConnector", "isConnector", "Flags to see if curve segment is a connector.", GH_ParamAccess.tree);
+            pManager.AddNumberParameter("thicknesses", "thicknesses", "Thicknesses of each layer", GH_ParamAccess.list);
+            pManager.AddBrepParameter("slices", "slices", "Sprayed slices.", GH_ParamAccess.list);
         }
 
         protected override void SolveInstance(IGH_DataAccess DA)
         {
             Brep surf = null;
             Surface extSurf = null;
-            Brep regionSurf = null;
+            Brep topSurf = null;
             double dist = 0;
             double expandDist = 0;
+            double flowRate = 0;
+            double spraySpeed = 0;
+            double spraySpeedConn = 0;
             double numGeo = 0;
 
             DA.GetData(0, ref surf);
             DA.GetData(1, ref extSurf);
-            DA.GetData(2, ref regionSurf);
+            DA.GetData(2, ref topSurf);
             DA.GetData(3, ref dist);
             DA.GetData(4, ref expandDist);
-            DA.GetData(5, ref numGeo);
+            DA.GetData(5, ref flowRate);
+            DA.GetData(6, ref spraySpeed);
+            DA.GetData(7, ref spraySpeedConn);
+            DA.GetData(8, ref numGeo);
 
-            List<List<Curve>> segments;
-            List<List<bool>> isConnector;
-            var res = SprayInnerPaths(surf, extSurf, dist, expandDist, (int)numGeo, out segments, out isConnector);
+            List<List<Curve>> baseSegments;
+            List<List<bool>> baseIsConnector;
+            List<Brep> slices = new List<Brep>();
+            List<double> thicknesses = new List<double>();
 
-            if (regionSurf != null)
+            var res = SprayInnerPaths(surf, extSurf, dist, expandDist, (int)numGeo, out baseSegments, out baseIsConnector);
+
+            List<Curve> paths = new List<Curve>();
+            List<List<Curve>> segments = new List<List<Curve>>();
+            List<List<bool>> isConnector = new List<List<bool>>();
+
+            // Add first path
+            paths.Add(res[0]);
+            segments.Add(baseSegments[0]);
+            isConnector.Add(baseIsConnector[0]);
+
+            // Calculate base thickness
+            var baseArea = surf.GetArea();
+
+            var currThickness = 0.0;
+            for (int i = 0; i < baseSegments[0].Count; i++)
             {
-                List<Curve> trimmedPaths = new List<Curve>();
-                List<List<Curve>> trimmedSegments = new List<List<Curve>>();
-                List<List<bool>> trimmedConnector = new List<List<bool>>();
-                for (int i = 0; i < segments.Count; i++)
+                currThickness += baseSegments[0][i].GetLength() /
+                    (baseIsConnector[0][i] ? spraySpeedConn : spraySpeed) * flowRate / baseArea;
+            }
+
+            slices.Add(surf.Faces[0].CreateExtrusion(
+                new LineCurve(new Point3d(), (new Point3d()) + Vector3d.ZAxis * currThickness), true));
+
+            thicknesses.Add(currThickness);
+
+            // Extrude the top surface to create a cutter
+            var bBoxHeight = surf.GetBoundingBox(false).Diagonal.Z;
+            var topSurfaceCutter = topSurf.Faces[0].CreateExtrusion(
+                new LineCurve(new Point3d(0, 0, 0), new Point3d(0, 0, bBoxHeight)),
+                true);
+
+            // Loop through thickness
+            bool loopFlag = true;
+            int currSegmentUsed = 2;
+            while(loopFlag)
+            {
+                // Get trimmed surface
+                var shiftedCutter = topSurfaceCutter.DuplicateBrep();
+                shiftedCutter.Translate(new Vector3d(0, 0, -currThickness));
+
+                var splitSurface = surf.Split(shiftedCutter, Miscellaneous.ToleranceDistance).ToList();
+
+                // Filter cutter by minimum area
+                splitSurface = splitSurface.Where(s => s.GetArea() > Miscellaneous.ToleranceDistance).ToList();
+
+                // No collision with cutter so just add the entire surface
+                if (splitSurface.Count == 0)
+                    splitSurface.Add(surf.DuplicateBrep());
+
+                splitSurface = splitSurface.Where(s =>
+                    {
+                        var points = s.GetWireframe(2).Select(c => c.PointAtNormalizedLength(0.5)).ToList();
+                        var closestPoints = shiftedCutter.Faces[0].PullPointsToFace(points, surf.GetBoundingBox(false).Diagonal.SquareLength * 10e9).ToList();
+
+                        var p = points
+                            .Zip(closestPoints, (p1, p2) => new
+                            {
+                                p1 = p1,
+                                p2 = p2,
+                            })
+                            .OrderByDescending(item => item.p1.DistanceToSquared(item.p2))
+                            .First();
+
+                        return (p.p2.Z > p.p1.Z);
+                    })
+                    .ToList();
+
+                // No surfaces above cutter so end loop
+                if (splitSurface.Count == 0)
                 {
+                    loopFlag = false;
+                    break;
+                }
+
+                // Loop through split surface
+                var addedThickness = 0.0;
+                var numAdded = 0;
+                foreach (var splitSurf in splitSurface)
+                {
+                    List<Curve> trimmedPaths = new List<Curve>();
+                    List<List<Curve>> trimmedSegments = new List<List<Curve>>();
+                    List<List<bool>> trimmedConnector = new List<List<bool>>();
+
+                    // Trim base segments to create new segments and path
                     var importantSegments = new List<Curve>();
 
-                    var filteredSegments = segments[i]
-                        .Zip(isConnector[i], (segment, flag) => new {
+                    var filteredSegments = baseSegments[currSegmentUsed]
+                        .Zip(baseIsConnector[currSegmentUsed], (segment, flag) => new
+                        {
                             segment = segment,
                             flag = flag,
                         })
@@ -79,32 +173,91 @@ namespace ACORNSpraying
                         .Select(item => item.segment)
                         .ToList();
 
-                    foreach(var c in filteredSegments)
+                    // Trim segments with surface
+                    foreach (var c in filteredSegments)
                     {
                         List<Curve> insideCurves;
-                        Miscellaneous.TrimCurveSurface(c, regionSurf, out insideCurves, out _);
+                        Miscellaneous.TrimCurveSurface(c, splitSurf, out insideCurves, out _);
                         importantSegments.AddRange(insideCurves);
                     }
+
+                    // If no segments we continue. Other segments may still be useful.
+                    if (importantSegments.Count == 0)
+                        continue;
 
                     List<Curve> newTrimmedSegments;
                     List<bool> newTrimmedConnector;
                     var joinedCurve = ConnectGeometries(importantSegments.Select(s => s as GeometryBase).ToList(),
                         false, out newTrimmedSegments, out newTrimmedConnector);
-                    trimmedPaths.Add(joinedCurve);
-                    trimmedSegments.Add(newTrimmedSegments);
-                    trimmedConnector.Add(newTrimmedConnector);
+
+                    // If too short, we also continue
+                    if (joinedCurve.GetLength() <= dist)
+                        continue;
+
+                    // Shift segments and curve to current thickness
+                    joinedCurve.Translate(0, 0, currThickness);
+                    foreach (var s in newTrimmedSegments)
+                        s.Translate(0, 0, currThickness);
+
+                    paths.Add(joinedCurve);
+                    segments.Add(newTrimmedSegments);
+                    isConnector.Add(newTrimmedConnector);
+
+                    numAdded++;
+
+                    // Calculate added thickness. Divide volume by total area at the end.
+                    for (int i = 0; i < newTrimmedSegments.Count; i++)
+                    {
+                        addedThickness += newTrimmedSegments[i].GetLength() /
+                            (newTrimmedConnector[i] ? spraySpeedConn : spraySpeed) * flowRate;
+                    }
                 }
 
-                DA.SetDataList(0, trimmedPaths);
-                DA.SetDataList(1, trimmedSegments.SelectMany(x => x).ToList());
-                DA.SetDataList(2, trimmedConnector.SelectMany(x => x).ToList());
+                // Nothing was added so lets end it
+                if (numAdded == 0)
+                {
+                    loopFlag = false;
+                    break;
+                }
+
+                // Divide added thickness by total area
+                addedThickness /= splitSurface.Select(s => s.GetArea()).Sum();
+
+                foreach (var splitSurf in splitSurface)
+                {
+                    var extrusion = splitSurf.Faces[0].CreateExtrusion(
+                        new LineCurve(new Point3d(), (new Point3d()) + Vector3d.ZAxis * addedThickness), true);
+                    extrusion.Translate(0, 0, currThickness);
+                    slices.Add(extrusion);
+                    thicknesses.Add(currThickness + addedThickness);
+                }
+                currThickness += addedThickness;
+
+                // Shift the segment to be used
+                currSegmentUsed++;
+                if (currSegmentUsed >= baseSegments.Count)
+                    currSegmentUsed = 0;
             }
-            else
+
+            // Format into trees
+            DataTree<Curve> pathTree = new DataTree<Curve>();
+            DataTree<Curve> segmentsTree = new DataTree<Curve>();
+            DataTree<bool> connectorTree = new DataTree<bool>();
+
+            for (int i = 0; i < segments.Count; i++)
             {
-                DA.SetDataList(0, res);
-                DA.SetDataList(1, segments.SelectMany(x => x).ToList());
-                DA.SetDataList(2, isConnector.SelectMany(x => x).ToList());
+                for (int j = 0; j < segments[i].Count; j++)
+                {
+                    segmentsTree.Insert(segments[i][j], new GH_Path(i), j);
+                    connectorTree.Insert(isConnector[i][j], new GH_Path(i), j);
+                }
             }
+
+            DA.SetDataList(0, paths);
+            DA.SetDataTree(1, segmentsTree);
+            DA.SetDataTree(2, connectorTree);
+            DA.SetDataList(3, thicknesses);
+            DA.SetDataList(4, slices);
         }
 
         protected override System.Drawing.Bitmap Icon
