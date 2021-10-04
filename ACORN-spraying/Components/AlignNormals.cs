@@ -65,6 +65,9 @@ namespace ACORNSpraying
             if (useDegrees)
                 angle *= Math.PI / 180;
 
+            if (edgeSprayPath == null)
+                edgeSprayPath = surf.Boundary();
+
             // Check if not on surface boundary
             var boundary2d = Curve.ProjectToPlane(edgeSprayPath, Plane.WorldXY);
             var point2d = new Point3d(point);
