@@ -22,7 +22,11 @@ namespace ACORNSpraying
         protected override void RegisterInputParams(GH_Component.GH_InputParamManager pManager)
         {
             pManager.AddBrepParameter("surf", "surf", "Surface to extend. Input as Brep in order to maintain trims.", GH_ParamAccess.item);
+            pManager.AddSurfaceParameter("extSurf", "extSurf", "Extended surface. Use ExtendSurf or untrim the Brep.", GH_ParamAccess.item);
             pManager.AddPointParameter("startP", "startP", "Starting point of spray to align seam.", GH_ParamAccess.item);
+            pManager.AddNumberParameter("expandDist", "expandDist", "Length to extend path lines past surface bounds.", GH_ParamAccess.item, 0);
+
+            pManager[3].Optional = true;
         }
 
         protected override void RegisterOutputParams(GH_Component.GH_OutputParamManager pManager)
@@ -33,12 +37,16 @@ namespace ACORNSpraying
         protected override void SolveInstance(IGH_DataAccess DA)
         {
             Brep surf = null;
+            Surface extSurf = null;
             Point3d startP = new Point3d();
+            double expandDist = 0;
 
             DA.GetData(0, ref surf);
-            DA.GetData(1, ref startP);
+            DA.GetData(1, ref extSurf);
+            DA.GetData(2, ref startP);
+            DA.GetData(3, ref expandDist);
 
-            var res = SprayEdgePath(surf, startP);
+            var res = SprayEdgePath(surf, extSurf, startP, expandDist);
 
             DA.SetData(0, res);
         }

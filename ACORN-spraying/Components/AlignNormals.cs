@@ -28,9 +28,11 @@ namespace ACORNSpraying
         {
             pManager.AddPointParameter("point", "point", "Location of frame.", GH_ParamAccess.item);
             pManager.AddBrepParameter("surf", "surf", "Surface to extend. Input as Brep in order to maintain trims.", GH_ParamAccess.item);
+            pManager.AddCurveParameter("edgeSprayPath", "edgeSprayPath", "Edge spray path to shift by an angle.", GH_ParamAccess.item);
             pManager.AddAngleParameter("angle", "angle", "Angle to spray at in radians for the edges.", GH_ParamAccess.item, 0);
 
             pManager[2].Optional = true;
+            pManager[3].Optional = true;
         }
 
         protected override void RegisterOutputParams(GH_Component.GH_OutputParamManager pManager)
@@ -43,7 +45,7 @@ namespace ACORNSpraying
             base.BeforeSolveInstance();
 
             useDegrees = false;
-            Param_Number angleParameter = Params.Input[2] as Param_Number;
+            Param_Number angleParameter = Params.Input[3] as Param_Number;
             if (angleParameter != null)
                 useDegrees = angleParameter.UseDegrees;
         }
@@ -52,20 +54,43 @@ namespace ACORNSpraying
         {
             Point3d point = new Point3d();
             Brep surf = null;
+            Curve edgeSprayPath = null;
             double angle = 0;
 
             DA.GetData(0, ref point);
             DA.GetData(1, ref surf);
-            DA.GetData(2, ref angle);
+            DA.GetData(2, ref edgeSprayPath);
+            DA.GetData(3, ref angle);
 
             if (useDegrees)
                 angle *= Math.PI / 180;
 
-            // Get surface boundary
-            var pTest = surf.ClosestPoint(point);
-            if (pTest.DistanceToSquared(point) > ToleranceDistance * ToleranceDistance * 1e6)
+            // Check if not on surface boundary
+            var boundary2d = Curve.ProjectToPlane(edgeSprayPath, Plane.WorldXY);
+            var point2d = new Point3d(point);
+            point2d.Z = 0;
+
+            var containmentTest = boundary2d.Contains(point2d, Plane.WorldXY, ToleranceDistance);
+
+            double paramT;
+            edgeSprayPath.ClosestPoint(point, out paramT);
+
+            if (containmentTest == PointContainment.Outside)
             {
                 DA.SetData(0, -Vector3d.ZAxis);
+                return;
+            }
+            else if (containmentTest == PointContainment.Inside)
+            {
+                var p = Rhino.Geometry.Intersect.Intersection.ProjectPointsToBreps(new List<Brep>() { surf }, new List<Point3d>() { point }, Vector3d.ZAxis, ToleranceDistance);
+
+                double surfU, surfV;
+                surf.Faces[0].ClosestPoint(p[0], out surfU, out surfV);
+                var norm = surf.Faces[0].NormalAt(surfU, surfV);
+                if (norm.Z > 0)
+                    norm.Reverse();
+
+                DA.SetData(0, norm);
                 return;
             }
 
@@ -78,7 +103,8 @@ namespace ACORNSpraying
             if (surfNorm.Z > 0)
                 surfNorm.Reverse();
 
-            var boundarySegments = surf.Boundary().DuplicateSegments();
+            var boundarySegments = edgeSprayPath.DuplicateSegments();
+
             var normalVecs = new List<Vector3d>();
             foreach(var seg in boundarySegments)
             {
@@ -91,10 +117,10 @@ namespace ACORNSpraying
                     var testVector = Vector3d.CrossProduct(-surfNorm, curveTangent);
                     var testPoint1 = point + testVector;
                     var testPoint2 = point - testVector;
-                    var testDist1 = surf.ClosestPoint(testPoint1).DistanceToSquared(testPoint1);
-                    var testDist2 = surf.ClosestPoint(testPoint2).DistanceToSquared(testPoint2);
 
-                    if (testDist1 > testDist2)
+                    testPoint1.Z = 0;
+
+                    if (boundary2d.Contains(testPoint1, Plane.WorldXY, ToleranceDistance) == PointContainment.Outside)
                         curveTangent.Reverse();
 
                     // Rotate surfNorm

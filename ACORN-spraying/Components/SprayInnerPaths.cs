@@ -104,7 +104,7 @@ namespace ACORNSpraying
             List<double> thicknesses = new List<double>();
 
             List<Curve> surfEdges;
-            var res = SprayInnerPaths(surf, extSurf, dist, expandDist, (int)numGeo, sourceEdges.Cast<int>().ToList(), out baseSegments, out baseIsConnector, out surfEdges);
+            var res = SprayInnerPaths(surf, extSurf, dist, expandDist, (int)numGeo, sourceEdges.Select(x => (int)x).ToList(), out baseSegments, out baseIsConnector, out surfEdges);
             SurfEdges = surfEdges;
 
             List<Curve> paths = new List<Curve>();
@@ -112,18 +112,48 @@ namespace ACORNSpraying
             List<List<bool>> isConnector = new List<List<bool>>();
 
             // Add first path
-            paths.Add(res[0]);
-            segments.Add(baseSegments[0]);
-            isConnector.Add(baseIsConnector[0]);
+            PolyCurve repeatedFirstJoinedCurve = new PolyCurve();
+            List<Curve> repeatedFirstTrimmedSegments = new List<Curve>();
+            List<bool> repeatedFirstTrimmedConnector = new List<bool>();
+            for (int i = 0; i < pathRepeat; i++)
+            {
+                if (i % 2 == 0)
+                {
+                    repeatedFirstJoinedCurve.Append(res[0]);
+                    repeatedFirstTrimmedSegments.AddRange(baseSegments[0].Select(c => c.DuplicateCurve()));
+                    repeatedFirstTrimmedConnector.AddRange(baseIsConnector[0]);
+                }
+                else
+                {
+                    var duplicateCurve = res[0].DuplicateCurve();
+                    duplicateCurve.Reverse();
+                    repeatedFirstJoinedCurve.Append(duplicateCurve);
+                    var tmpCurveList = baseSegments[0]
+                        .Select(c => {
+                            var newCurve = c.DuplicateCurve();
+                            newCurve.Reverse();
+                            return newCurve;
+                        })
+                        .ToList();
+                    tmpCurveList.Reverse();
+                    repeatedFirstTrimmedSegments.AddRange(tmpCurveList);
+                    var tmpBoolList = new List<bool>(baseIsConnector[0]);
+                    tmpBoolList.Reverse();
+                    repeatedFirstTrimmedConnector.AddRange(tmpBoolList);
+                }
+            }
+            paths.Add(repeatedFirstJoinedCurve);
+            segments.Add(repeatedFirstTrimmedSegments);
+            isConnector.Add(repeatedFirstTrimmedConnector);
 
             // Calculate base thickness
             var baseArea = surf.GetArea();
 
             var currThickness = 0.0;
-            for (int i = 0; i < baseSegments[0].Count; i++)
+            for (int i = 0; i < repeatedFirstTrimmedSegments.Count; i++)
             {
-                currThickness += baseSegments[0][i].GetLength() /
-                    (baseIsConnector[0][i] ? spraySpeedConn : spraySpeed) * flowRate / baseArea;
+                currThickness += repeatedFirstTrimmedSegments[i].GetLength() /
+                    (repeatedFirstTrimmedConnector[i] ? spraySpeedConn : spraySpeed) * flowRate / baseArea;
             }
 
             slices.Add(surf.Faces[0].CreateExtrusion(
@@ -141,7 +171,7 @@ namespace ACORNSpraying
 
             // Loop through thickness
             bool loopFlag = true;
-            int currSegmentUsed = 2;
+            int currSegmentUsed = Math.Min(1, baseSegments.Count - 1);
             while(loopFlag)
             {
                 // Get trimmed surface
@@ -185,6 +215,7 @@ namespace ACORNSpraying
                 // Loop through split surface
                 var addedThickness = 0.0;
                 var numAdded = 0;
+                List<Brep> addedSlices = new List<Brep>();
                 foreach (var splitSurf in splitSurface)
                 {
                     List<Curve> trimmedPaths = new List<Curve>();
@@ -194,32 +225,52 @@ namespace ACORNSpraying
                     // Trim base segments to create new segments and path
                     var importantSegments = new List<Curve>();
 
-                    var filteredSegments = baseSegments[currSegmentUsed]
-                        .Zip(baseIsConnector[currSegmentUsed], (segment, flag) => new
-                        {
-                            segment = segment,
-                            flag = flag,
-                        })
-                        .Where(item => !item.flag)
-                        .Select(item => item.segment)
-                        .ToList();
-
-                    // Trim segments with surface
-                    foreach (var c in filteredSegments)
+                    int trialSegment = currSegmentUsed;
+                    do
                     {
-                        List<Curve> insideCurves;
-                        Miscellaneous.TrimCurveSurface(c, splitSurf, out insideCurves, out _);
-                        importantSegments.AddRange(insideCurves);
-                    }
+                        var filteredSegments = baseSegments[trialSegment]
+                            .Zip(baseIsConnector[trialSegment], (segment, flag) => new
+                            {
+                                segment = segment,
+                                flag = flag,
+                            })
+                            .Where(item => !item.flag)
+                            .Select(item => item.segment)
+                            .ToList();
+
+                        // Trim segments with surface
+                        foreach (var c in filteredSegments)
+                        {
+                            List<Curve> insideCurves;
+                            Miscellaneous.TrimCurveSurface(c, splitSurf, out insideCurves, out _);
+                            importantSegments.AddRange(insideCurves);
+                        }
+
+                        // If no segments we try a different segment path
+                        if (importantSegments.Count == 0)
+                        {
+                            trialSegment++;
+                            if (trialSegment >= baseSegments.Count)
+                                trialSegment = 0;
+                        }
+                        // If total length is too short also try a different segment path
+                        else if (importantSegments.Select(s => s.GetLength()).Sum() <= dist)
+                        {
+                            importantSegments = new List<Curve>();
+                            trialSegment++;
+                            if (trialSegment >= baseSegments.Count)
+                                trialSegment = 0;
+                        }
+                    } while (trialSegment != currSegmentUsed && importantSegments.Count == 0);
 
                     // If no segments we continue. Other segments may still be useful.
                     if (importantSegments.Count == 0)
                         continue;
 
-                    List<Curve> newTrimmedSegments;
+                    List <Curve> newTrimmedSegments;
                     List<bool> newTrimmedConnector;
                     var joinedCurve = ConnectGeometries(importantSegments.Select(s => s as GeometryBase).ToList(),
-                        Enumerable.Repeat(true, importantSegments.Count).ToList(), out newTrimmedSegments, out newTrimmedConnector);
+                        Enumerable.Repeat(false, importantSegments.Count).ToList(), out newTrimmedSegments, out newTrimmedConnector);
 
                     // If too short, we also continue
                     if (joinedCurve.GetLength() <= dist)
@@ -266,6 +317,7 @@ namespace ACORNSpraying
                     paths.Add(repeatedJoinedCurve);
                     segments.Add(repeatedTrimmedSegments);
                     isConnector.Add(repeatedTrimmedConnector);
+                    addedSlices.Add(splitSurf);
 
                     numAdded++;
 
@@ -285,9 +337,9 @@ namespace ACORNSpraying
                 }
 
                 // Divide added thickness by total area
-                addedThickness /= splitSurface.Select(s => s.GetArea()).Sum();
+                addedThickness /= addedSlices.Select(s => s.GetArea()).Sum();
 
-                foreach (var splitSurf in splitSurface)
+                foreach (var splitSurf in addedSlices)
                 {
                     var extrusion = splitSurf.Faces[0].CreateExtrusion(
                         new LineCurve(new Point3d(), (new Point3d()) + Vector3d.ZAxis * addedThickness), true);

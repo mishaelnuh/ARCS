@@ -189,9 +189,9 @@ namespace ACORNSpraying
 
             // Get an extrusion to use as intersection Brep
             var curveBounds = curve.GetBoundingBox(false);
-            var extrusionCurve = new LineCurve(new Point3d(), (new Point3d()) + Vector3d.ZAxis * (curveBounds.Max.Z - curveBounds.Min.Z + 4 * ToleranceDistance));
+            var extrusionCurve = new LineCurve(new Point3d(), (new Point3d()) + Vector3d.ZAxis * ((curveBounds.Max.Z - curveBounds.Min.Z) * 10 + 4 * ToleranceDistance));
             var extrusion = brep.Faces[0].CreateExtrusion(extrusionCurve, true);
-            extrusion.Translate(new Vector3d(0, 0, - (curveBounds.Max.Z - curveBounds.Min.Z) / 2 - 2 * ToleranceDistance));
+            extrusion.Translate(new Vector3d(0, 0, - (curveBounds.Max.Z - curveBounds.Min.Z) * 5 - 2 * ToleranceDistance));
 
             // Get intersection parameters
             var intersections = new List<double> { curve.Domain.Min };

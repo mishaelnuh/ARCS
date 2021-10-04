@@ -15,30 +15,17 @@ namespace ACORNSpraying
 
         public PathCombiner()
           : base("Combine Paths", "ACORN_Combine",
-              "Combine spray paths along wth start and end points.",
+              "Combine spray paths geometries.",
               "ACORN", "Spraying")
         {
         }
 
         protected override void RegisterInputParams(GH_Component.GH_InputParamManager pManager)
         {
-            pManager.AddPointParameter("startP", "startP", "Starting point of spray path.", GH_ParamAccess.item, Point3d.Unset);
-            pManager.AddCurveParameter("segments", "segments", "Spray segments.", GH_ParamAccess.list);
-            pManager.AddBooleanParameter("isConnector", "isConnector", "Flags to see if segment is a connector.", GH_ParamAccess.list);
-            pManager.AddPointParameter("endP", "endP", "End point of spray path.", GH_ParamAccess.item, Point3d.Unset);
-            
-            pManager.AddBooleanParameter("maintainDir", "maintainDir", "Maintain or flip curve directions.", GH_ParamAccess.item, false);
+            pManager.AddGeometryParameter("geometries", "geometries", "Path geometries to connect", GH_ParamAccess.list);
+            pManager.AddBooleanParameter("isConnector", "isConnector", "Flags to see if geometry is a connector. Same length as geometries list.", GH_ParamAccess.list);
 
-            pManager.AddBrepParameter("surf", "surf", "Surface to extend. Input as Brep in order to maintain trims.", GH_ParamAccess.item);
-            pManager.AddSurfaceParameter("extSurf", "extSurf", "Extended surface. Use ExtendSurf or untrim the Brep.", GH_ParamAccess.item);
-            pManager.AddNumberParameter("expandDist", "expandDist", "Length to extend path lines past surface bounds.", GH_ParamAccess.item);
-
-            pManager.AddNumberParameter("numLayer", "numLayer", "Number of repeats for the path.", GH_ParamAccess.item, 1);
-
-            pManager[0].Optional = true;
-            pManager[3].Optional = true;
-            pManager[4].Optional = true;
-            pManager[8].Optional = true;
+            pManager[1].Optional = true;
         }
 
         protected override void RegisterOutputParams(GH_Component.GH_OutputParamManager pManager)
@@ -49,109 +36,22 @@ namespace ACORNSpraying
 
         protected override void SolveInstance(IGH_DataAccess DA)
         {
-            Point3d startP = new Point3d();
-            List<Curve> segments = new List<Curve>();
+            List<GeometryBase> geometries = new List<GeometryBase>();
             List<bool> isConnector = new List<bool>();
-            Point3d endP = new Point3d();
 
-            bool maintainDir = false;
+            DA.GetDataList(0, geometries);
+            DA.GetDataList(1, isConnector);
 
-            Brep surf = null;
-            Surface extSurf = null;
-            double expandDist = 0;
-
-            double numLayer = 1;
-
-            DA.GetData(0, ref startP);
-            DA.GetDataList(1, segments);
-            DA.GetDataList(2, isConnector);
-            DA.GetData(3, ref endP);
-
-            DA.GetData(4, ref maintainDir);
-
-            DA.GetData(5, ref surf);
-            DA.GetData(6, ref extSurf);
-            DA.GetData(7, ref expandDist);
-
-            DA.GetData(8, ref numLayer);
-
-            var outputSegments = new List<Curve>();
-            var outputFlags = new List<bool>();
-
-            if (segments.Count == 0)
+            if (geometries.Count == 0)
                 return;
 
-            // Add line from start point to edge path
-            if (startP.IsValid)
-            {
-                outputSegments.Add(new LineCurve(startP, segments.First().PointAtStart));
-                outputFlags.Add(true);
-            }
+            List<Curve> segments;
+            List<bool> connector;
 
-            // Add connected path
-            List<Curve> tmpSegments;
-            List<bool> tmpFlags;
+            ConnectGeometriesSequential(geometries, isConnector, out segments, out connector);
 
-            var connectedPath = ConnectGeometriesThroughBoundary(
-                segments.Cast<GeometryBase>().ToList(),
-                isConnector,
-                surf, extSurf, expandDist,
-                maintainDir,
-                out tmpSegments, out tmpFlags);
-
-            List<Curve> tmpConnector;
-            List<bool> tmpConnectorFlag;
-
-            var layerConnector = ConnectGeometriesThroughBoundary(
-                new List<GeometryBase>()
-                {
-                    new Point(connectedPath.PointAtEnd),
-                    new Point(connectedPath.PointAtStart)
-                },
-                isConnector,
-                surf, extSurf, expandDist,
-                maintainDir,
-                out tmpConnector, out tmpConnectorFlag);
-
-            for (int i = 0; i < numLayer; i++)
-            {
-                outputSegments.AddRange(tmpSegments);
-                outputFlags.AddRange(tmpFlags);
-                if (i < numLayer - 1)
-                {
-                    outputSegments.AddRange(tmpConnector);
-                    outputFlags.AddRange(tmpConnectorFlag);
-                }
-            }
-
-            // Add path from end of inner path to end point
-            if (!endP.IsValid)
-            {
-                if (startP.IsValid)
-                    endP = startP;
-                else
-                    endP = segments.First().PointAtStart;
-            }
-
-            tmpSegments.Clear();
-            tmpFlags.Clear();
-
-            ConnectGeometriesThroughBoundary(
-                new List<GeometryBase>()
-                {
-                    new Point(connectedPath.PointAtEnd),
-                    new Point(endP)
-                },
-                Enumerable.Repeat(true, 2).ToList(),
-                surf, extSurf, 0,
-                maintainDir,
-                out tmpSegments, out tmpFlags);;
-
-            outputSegments.AddRange(tmpSegments);
-            outputFlags.AddRange(tmpFlags);
-
-            DA.SetDataList(0, outputSegments);
-            DA.SetDataList(1, outputFlags);
+            DA.SetDataList(0, segments);
+            DA.SetDataList(1, connector);
         }
 
         protected override System.Drawing.Bitmap Icon

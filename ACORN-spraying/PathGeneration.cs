@@ -157,16 +157,15 @@ namespace ACORNSpraying
             return paths;
         }
 
-        public static Curve SprayEdgePath(Brep surf, Point3d startP)
+        public static Curve SprayEdgePath(Brep surf, Surface extSurf, Point3d startP, double expandDist)
         {
-            var perim = surf.Boundary();
+            var boundary = OffsetSurfBoundary(surf, extSurf, expandDist);
 
             double t;
-            perim.ClosestPoint(startP, out t);
+            boundary.ClosestPoint(startP, out t);
+            boundary.ChangeClosedCurveSeam(t);
 
-            perim.ChangeClosedCurveSeam(t);
-
-            return perim;
+            return boundary;
         }
 
         /// <summary>
@@ -489,7 +488,7 @@ namespace ACORNSpraying
             {
                 currentPosition = (geometries[0] as Curve).PointAtEnd;
                 segments.Add((geometries[0] as Curve));
-                isConnectorSegment.Add(false);
+                isConnectorSegment.Add(isGeometryConnector[0]);
             }
             else if (geometries[0].GetType() == typeof(Point))
             {
@@ -539,7 +538,7 @@ namespace ACORNSpraying
                 {
                     // Add curve
                     segments.Add(nextCurve);
-                    isConnectorSegment.Add(false);
+                    isConnectorSegment.Add(isGeometryConnector[Math.Abs(index)]);
 
                     // Remove curves from map
                     if (index < 0)
@@ -568,6 +567,70 @@ namespace ACORNSpraying
             }
 
             // Connect all segments
+            var connectedGeometries = new PolyCurve();
+            foreach (var s in segments)
+                connectedGeometries.Append(s);
+
+            return connectedGeometries;
+        }
+
+        public static Curve ConnectGeometriesSequential(List<GeometryBase> geometries, List<bool> isGeometryConnector,
+            out List<Curve> segments, out List<bool> isConnectorSegment)
+        {
+            isConnectorSegment = new List<bool>();
+            segments = new List<Curve>();
+
+            // Loop through and find all connections
+            Point3d currentPosition = new Point3d();
+
+            if (typeof(Curve).IsAssignableFrom(geometries[0].GetType()))
+            {
+                currentPosition = (geometries[0] as Curve).PointAtEnd;
+                segments.Add((geometries[0] as Curve));
+                isConnectorSegment.Add(isGeometryConnector[0]);
+            }
+            else if (geometries[0].GetType() == typeof(Point))
+            {
+                currentPosition = (geometries[0] as Point).Location;
+            }
+
+            for (int i = 1; i < geometries.Count; i++)
+            {
+                Curve nextCurve = null;
+                Point3d nextPosition = new Point3d();
+                Point3d nextStart = new Point3d();
+
+                if (typeof(Curve).IsAssignableFrom(geometries[i].GetType()))
+                {
+                    var curve = geometries[i] as Curve;
+                    nextCurve = curve.DuplicateCurve();
+
+                    nextPosition = curve.PointAtEnd;
+                    nextStart = curve.PointAtStart;
+                }
+                else if (geometries[i].GetType() == typeof(Point))
+                {
+                    nextPosition = (geometries[i] as Point).Location;
+                    nextStart = nextPosition;
+                }
+
+                // Add connector
+                if (nextStart.DistanceToSquared(currentPosition) > ToleranceDistance * ToleranceDistance)
+                {
+                    segments.Add(new LineCurve(currentPosition, nextStart));
+                    isConnectorSegment.Add(true);
+                }
+
+                if (nextCurve != null)
+                {
+                    // Add curve
+                    segments.Add(nextCurve);
+                    isConnectorSegment.Add(isGeometryConnector[i]);
+                }   
+
+                currentPosition = nextPosition;
+            }
+
             var connectedGeometries = new PolyCurve();
             foreach (var s in segments)
                 connectedGeometries.Append(s);
