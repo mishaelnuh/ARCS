@@ -10,11 +10,12 @@ namespace ACORNSpraying
 {
     public static class PathGeneration
     {
-        public static List<Curve> SprayInnerPaths(Brep surf, Surface extSurf, double dist, double expandDist, int numGeo,
-            out List<List<Curve>> segments, out List<List<bool>> isConnector)
+        public static List<Curve> SprayInnerPaths(Brep surf, Surface extSurf, double dist, double expandDist, int numGeo, List<int> sourceEdges,
+            out List<List<Curve>> segments, out List<List<bool>> isConnector, out List<Curve> boundaryEdges)
         {
             segments = new List<List<Curve>>();
             isConnector = new List<List<bool>>();
+            boundaryEdges = new List<Curve>();
 
             // Find direction of spray paths to be used
             var boundary = OffsetSurfBoundary(surf, extSurf, expandDist);
@@ -68,9 +69,15 @@ namespace ACORNSpraying
                 .ToList();
 
             var paths = new List<Curve>();
+            var edgeCounter = -1;
             for (int i = 0; i < angles.Count; i++)
             {
                 if (expandDist > 0 && (i + skipOffset) % 2 == 0)
+                    continue;
+
+                edgeCounter++;
+
+                if (sourceEdges.Count > 0 && !sourceEdges.Contains(edgeCounter))
                     continue;
 
                 // Define planes and 90 deg rotated plane
@@ -143,6 +150,8 @@ namespace ACORNSpraying
                 segments.Add(tmp1);
                 isConnector.Add(tmp2);
                 paths.Add(connectedPath);
+
+                boundaryEdges.Add(edges[i]);
             }
 
             return paths;
@@ -432,16 +441,16 @@ namespace ACORNSpraying
 
             return connectedGeometries;
         }
-        
+
         /// <summary>
         /// Connect geometries starting from the first using closest neighbour consecutively.
         /// </summary>
         /// <param name="geometries">Geometries to connect. Only curves and points.</param>
-        /// <param name="maintainDir">Whether to maintain or flip curve directions.</param>
+        /// <param name="isGeometryConnector">Flag to show whether original geometry is a connector. Should be same length as the geometries list.</param>
         /// <param name="segments">Curve segments exploded.</param>
         /// <param name="isConnectorSegment">Flags to show which segments are connectors.</param>
         /// <returns></returns>
-        public static Curve ConnectGeometries(List<GeometryBase> geometries, bool maintainDir,
+        public static Curve ConnectGeometries(List<GeometryBase> geometries, List<bool> isGeometryConnector,
             out List<Curve> segments, out List<bool> isConnectorSegment)
         {
             isConnectorSegment = new List<bool>();
