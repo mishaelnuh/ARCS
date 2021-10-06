@@ -618,7 +618,10 @@ namespace ACORNSpraying
                 if (nextStart.DistanceToSquared(currentPosition) > ToleranceDistance * ToleranceDistance)
                 {
                     segments.Add(new LineCurve(currentPosition, nextStart));
-                    isConnectorSegment.Add(true);
+                    if (geometries[i].GetType() == typeof(Point))
+                        isConnectorSegment.Add(isGeometryConnector[i]);
+                    else
+                        isConnectorSegment.Add(true);
                 }
 
                 if (nextCurve != null)

@@ -22,7 +22,7 @@ namespace ACORNSpraying
 
         protected override void RegisterInputParams(GH_Component.GH_InputParamManager pManager)
         {
-            pManager.AddGeometryParameter("geometries", "geometries", "Path geometries to connect", GH_ParamAccess.list);
+            pManager.AddGenericParameter("geometries", "geometries", "Path geometries to connect", GH_ParamAccess.list);
             pManager.AddBooleanParameter("isConnector", "isConnector", "Flags to see if geometry is a connector. Same length as geometries list.", GH_ParamAccess.list);
 
             pManager[1].Optional = true;
@@ -36,7 +36,7 @@ namespace ACORNSpraying
 
         protected override void SolveInstance(IGH_DataAccess DA)
         {
-            List<GeometryBase> geometries = new List<GeometryBase>();
+            List<object> geometries = new List<object>();
             List<bool> isConnector = new List<bool>();
 
             DA.GetDataList(0, geometries);
@@ -48,7 +48,17 @@ namespace ACORNSpraying
             List<Curve> segments;
             List<bool> connector;
 
-            ConnectGeometriesSequential(geometries, isConnector, out segments, out connector);
+            ConnectGeometriesSequential(
+                geometries.Select(g =>
+                {
+                    if (g.GetType() == typeof(Grasshopper.Kernel.Types.GH_Curve))
+                        return (g as Grasshopper.Kernel.Types.GH_Curve).Value as GeometryBase;  
+                    else if (g.GetType() == typeof(Grasshopper.Kernel.Types.GH_Point))
+                        return new Point((g as Grasshopper.Kernel.Types.GH_Point).Value) as GeometryBase;
+                    else
+                        return null;
+                }).ToList()
+                , isConnector, out segments, out connector);
 
             DA.SetDataList(0, segments);
             DA.SetDataList(1, connector);

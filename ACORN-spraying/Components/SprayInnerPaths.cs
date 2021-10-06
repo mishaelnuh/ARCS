@@ -53,6 +53,7 @@ namespace ACORNSpraying
             pManager.AddNumberParameter("numGeo", "numGeo", "Number of geodesics to calculate paths from.", GH_ParamAccess.item, 10);
             pManager.AddNumberParameter("sourceEdges", "sourceEdges", "Edges to align to. If not set, all edges are used.", GH_ParamAccess.list);
             pManager.AddNumberParameter("pathRepeat", "pathRepeat", "Number of times to repeat each path.", GH_ParamAccess.item, 1);
+            pManager.AddNumberParameter("thicknessFactor", "thicknessFactor", "Multiplicative factor for thickness.", GH_ParamAccess.item, 1);
 
             pManager[4].Optional = true;
             pManager[5].Optional = true;
@@ -61,6 +62,7 @@ namespace ACORNSpraying
             pManager[8].Optional = true;
             pManager[9].Optional = true;
             pManager[10].Optional = true;
+            pManager[11].Optional = true;
         }
 
         protected override void RegisterOutputParams(GH_Component.GH_OutputParamManager pManager)
@@ -85,6 +87,7 @@ namespace ACORNSpraying
             double numGeo = 0;
             List<double> sourceEdges = new List<double>();
             double pathRepeat = 1;
+            double thicknessFactor = 1.0;
 
             DA.GetData(0, ref surf);
             DA.GetData(1, ref extSurf);
@@ -97,6 +100,7 @@ namespace ACORNSpraying
             DA.GetData(8, ref numGeo);
             DA.GetDataList(9, sourceEdges);
             DA.GetData(10, ref pathRepeat);
+            DA.GetData(11, ref thicknessFactor);
 
             List<List<Curve>> baseSegments;
             List<List<bool>> baseIsConnector;
@@ -176,7 +180,7 @@ namespace ACORNSpraying
             {
                 // Get trimmed surface
                 var shiftedCutter = topSurfaceCutter.DuplicateBrep();
-                shiftedCutter.Translate(new Vector3d(0, 0, -currThickness));
+                shiftedCutter.Translate(new Vector3d(0, 0, -currThickness / thicknessFactor));
 
                 var splitSurface = surf.Split(shiftedCutter, Miscellaneous.ToleranceDistance).ToList();
 
