@@ -242,6 +242,11 @@ namespace ACORNSpraying
             var c1 = GetSubcurve(curve, t1, t0);
             c1.Reverse();
 
+            if (c0.PointAtStart.DistanceToSquared(c0.PointAtEnd) < ToleranceDistance * ToleranceDistance)
+                return new LineCurve(c0.PointAtStart, c0.PointAtEnd);
+            else if (c1.PointAtStart.DistanceToSquared(c1.PointAtEnd) < ToleranceDistance * ToleranceDistance)
+                return new LineCurve(c1.PointAtStart, c1.PointAtEnd);
+
             if (c0.GetLength() < c1.GetLength())
                 return c0;
             else

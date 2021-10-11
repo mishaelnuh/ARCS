@@ -9,13 +9,13 @@ using static ACORNSpraying.PathGeneration;
 
 namespace ACORNSpraying
 {
-    public class PathCombiner : GH_Component
+    public class ConnectGeometriesSequential : GH_Component
     {
         public override GH_Exposure Exposure { get => GH_Exposure.primary; }
 
-        public PathCombiner()
-          : base("Combine Paths", "ACORN_Combine",
-              "Combine spray paths geometries.",
+        public ConnectGeometriesSequential()
+          : base("Connect Geometries", "ACORN_Connect2",
+              "Connect geometries in sequence through shortest connections.",
               "ACORN", "Spraying")
         {
         }

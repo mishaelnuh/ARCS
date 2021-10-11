@@ -56,7 +56,7 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Components\PathCombiner.cs" />
+    <Compile Include="Components\ConnectGeometriesSequential.cs" />
     <Compile Include="Components\SprayEdgePath.cs" />
     <Compile Include="Components\AlignNormals.cs" />
     <Compile Include="Components\SprayInnerPaths.cs" />

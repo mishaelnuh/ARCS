@@ -162,6 +162,36 @@ namespace ACORNSpraying
             var boundary = OffsetSurfBoundary(surf, extSurf, expandDist);
 
             double t;
+
+            // Go to corner points from boundary
+            if (Math.Abs(expandDist) > ToleranceDistance)
+            {
+                var actualBoundary = surf.Boundary();
+                List<Point3d> cornerPoints = new List<Point3d>();
+                if (actualBoundary is PolylineCurve)
+                {
+                    cornerPoints = (actualBoundary as PolylineCurve).DuplicateSegments().Select(s => s.PointAtStart).ToList();
+
+                }
+                else if (boundary is PolyCurve)
+                {
+                    cornerPoints = (actualBoundary as PolyCurve).Explode().Select(s => s.PointAtStart).ToList();
+                }
+
+                foreach (var p in cornerPoints)
+                {
+                    boundary.ClosestPoint(p, out t);
+                    var closestPoint = boundary.PointAt(t);
+                    var newBoundary = new PolyCurve();
+                    newBoundary.Append(boundary.Trim(boundary.Domain.Min, t));
+                    newBoundary.Append(new LineCurve(closestPoint, p));
+                    newBoundary.Append(new LineCurve(p, closestPoint));
+                    newBoundary.Append(boundary.Trim(t, boundary.Domain.Max));
+                    boundary = newBoundary;
+                }
+            }
+
+            // Adjust seam
             boundary.ClosestPoint(startP, out t);
             boundary.ChangeClosedCurveSeam(t);
 
@@ -409,7 +439,15 @@ namespace ACORNSpraying
                 boundary.ClosestPoint(pEnd, out boundaryParamEnd);
                 boundary.ClosestPoint(pNext, out boundaryParamNext);
 
-                var connector = ShortestSubcurve(boundary, boundaryParamEnd, boundaryParamNext);
+                Curve connector = null;
+                if (Math.Pow((pEnd-pNext).X, 2) + Math.Pow((pEnd - pNext).Y, 2) < ToleranceDistance * ToleranceDistance)
+                {
+                    connector = new LineCurve(pEnd, pNext);
+                }
+                else
+                {
+                    connector = ShortestSubcurve(boundary, boundaryParamEnd, boundaryParamNext);
+                }
 
                 if (pEnd.DistanceToSquared(connector.PointAtStart) > ToleranceDistance * ToleranceDistance)
                 {
