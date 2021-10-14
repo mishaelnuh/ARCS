@@ -339,7 +339,7 @@ namespace ACORNSpraying
                 if (curve1 == null)
                     continue;
                 geodesicCut0.Add(curve0);
-                geodesicCut0[i].Reverse();
+                geodesicCut0[geodesicCut0.Count - 1].Reverse();
                 geodesicCut1.Add(curve1);
             }
 

@@ -18,6 +18,7 @@ namespace ACORNSpraying
         public override BoundingBox ClippingBox => clippingBox;
         
         public List<Curve> SurfEdges { get; set; }
+        public List<double> EdgeId { get; set; }
 
         public SprayInnerPaths()
           : base("Spray Inner Paths", "ACORN_SprayInner",
@@ -34,7 +35,7 @@ namespace ACORNSpraying
 
                 for (int i = 0; i < SurfEdges.Count; i++)
                 {
-                    args.Display.Draw2dText("Edge " + i.ToString(), System.Drawing.Color.Blue, SurfEdges[i].PointAtNormalizedLength(0.5), true);
+                    args.Display.Draw2dText("Edge " + (EdgeId.Count > 0 ? EdgeId[i] : i).ToString(), System.Drawing.Color.Blue, SurfEdges[i].PointAtNormalizedLength(0.5), true);
                     clippingBox.Union(SurfEdges[i].PointAtNormalizedLength(0.5));
                 }
             }
@@ -68,8 +69,8 @@ namespace ACORNSpraying
         protected override void RegisterOutputParams(GH_Component.GH_OutputParamManager pManager)
         {
             pManager.AddCurveParameter("paths", "paths", "Spray paths.", GH_ParamAccess.list);
-            pManager.AddCurveParameter("segments", "segments", "Flattened list of curve segments.", GH_ParamAccess.tree);
-            pManager.AddBooleanParameter("isConnector", "isConnector", "Flags to see if curve segment is a connector.", GH_ParamAccess.tree);
+            pManager.AddCurveParameter("segments", "segments", "Flattened list of curve segments.", GH_ParamAccess.list);
+            pManager.AddBooleanParameter("isConnector", "isConnector", "Flags to see if curve segment is a connector.", GH_ParamAccess.list);
             pManager.AddNumberParameter("thicknesses", "thicknesses", "Thicknesses of each layer", GH_ParamAccess.list);
             pManager.AddBrepParameter("slices", "slices", "Sprayed slices.", GH_ParamAccess.list);
         }
@@ -110,6 +111,7 @@ namespace ACORNSpraying
             List<Curve> surfEdges;
             var res = SprayInnerPaths(surf, extSurf, dist, expandDist, (int)numGeo, sourceEdges.Select(x => (int)x).ToList(), out baseSegments, out baseIsConnector, out surfEdges);
             SurfEdges = surfEdges;
+            EdgeId = sourceEdges;
 
             List<Curve> paths = new List<Curve>();
             List<List<Curve>> segments = new List<List<Curve>>();
@@ -162,7 +164,6 @@ namespace ACORNSpraying
 
             slices.Add(surf.Faces[0].CreateExtrusion(
                 new LineCurve(new Point3d(), (new Point3d()) + Vector3d.ZAxis * currThickness), true));
-
             thicknesses.Add(currThickness);
 
             // Extrude the top surface to create a cutter
@@ -170,7 +171,7 @@ namespace ACORNSpraying
             
             var topSurfaceCutter = Miscellaneous.ExtendSurf(topSurf, Plane.WorldYZ).ToBrep().Faces[0]
                 .CreateExtrusion(
-                    new LineCurve(new Point3d(0, 0, 0), new Point3d(0, 0, bBoxHeight)),
+                    new LineCurve(new Point3d(0, 0, 0), new Point3d(0, 0, bBoxHeight * 10)),
                     true);
 
             // Loop through thickness
@@ -181,7 +182,6 @@ namespace ACORNSpraying
                 // Get trimmed surface
                 var shiftedCutter = topSurfaceCutter.DuplicateBrep();
                 shiftedCutter.Translate(new Vector3d(0, 0, -currThickness / thicknessFactor));
-
                 var splitSurface = surf.Split(shiftedCutter, Miscellaneous.ToleranceDistance).ToList();
 
                 // Filter cutter by minimum area
@@ -359,23 +359,9 @@ namespace ACORNSpraying
                     currSegmentUsed = 0;
             }
 
-            // Format into trees
-            DataTree<Curve> pathTree = new DataTree<Curve>();
-            DataTree<Curve> segmentsTree = new DataTree<Curve>();
-            DataTree<bool> connectorTree = new DataTree<bool>();
-
-            for (int i = 0; i < segments.Count; i++)
-            {
-                for (int j = 0; j < segments[i].Count; j++)
-                {
-                    segmentsTree.Insert(segments[i][j], new GH_Path(i), j);
-                    connectorTree.Insert(isConnector[i][j], new GH_Path(i), j);
-                }
-            }
-
             DA.SetDataList(0, paths);
-            DA.SetDataTree(1, segmentsTree);
-            DA.SetDataTree(2, connectorTree);
+            DA.SetDataList(1, segments.SelectMany(x => x).ToList());
+            DA.SetDataList(2, isConnector.SelectMany(x => x).ToList());
             DA.SetDataList(3, thicknesses);
             DA.SetDataList(4, slices);
         }

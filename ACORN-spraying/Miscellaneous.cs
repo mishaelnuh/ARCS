@@ -92,13 +92,14 @@ namespace ACORNSpraying
             var perimLength = perim.GetLength();
 
             // Offset curve
-            var bounds = perim.OffsetOnSurface(extSurf, dist, ToleranceDistance)[0];
+            var bounds1 = perim.OffsetOnSurface(extSurf, dist, ToleranceDistance)[0];
+            var bounds2 = perim.OffsetOnSurface(extSurf, -dist, ToleranceDistance)[0];
 
-            // If the offset curve is shorter than surface perimeter, offset the other way
-            if (dist > 0 ^ bounds.GetLength() > perimLength)
-                bounds = perim.OffsetOnSurface(extSurf, -dist, ToleranceDistance)[0];
-
-            return bounds;
+            if (AreaMassProperties.Compute(Curve.ProjectToPlane(bounds1, Plane.WorldXY)).Area >
+                AreaMassProperties.Compute(Curve.ProjectToPlane(bounds2, Plane.WorldXY)).Area)
+                return bounds2;
+            else
+                return bounds1;
         }
 
         /// <summary>
@@ -188,7 +189,7 @@ namespace ACORNSpraying
             var toleranceVec = new Vector3d(0, 0, ToleranceDistance);
 
             // Get an extrusion to use as intersection Brep
-            var curveBounds = curve.GetBoundingBox(false);
+            var curveBounds = curve.GetBoundingBox(true);
             var extrusionCurve = new LineCurve(new Point3d(), (new Point3d()) + Vector3d.ZAxis * ((curveBounds.Max.Z - curveBounds.Min.Z) * 10 + 4 * ToleranceDistance));
             var extrusion = brep.Faces[0].CreateExtrusion(extrusionCurve, true);
             extrusion.Translate(new Vector3d(0, 0, - (curveBounds.Max.Z - curveBounds.Min.Z) * 5 - 2 * ToleranceDistance));
