@@ -56,6 +56,7 @@ namespace ACORNSpraying
             pManager.AddNumberParameter("pathRepeat", "pathRepeat", "Number of times to repeat each path.", GH_ParamAccess.item, 1);
             pManager.AddNumberParameter("thicknessFactor", "thicknessFactor", "Multiplicative factor for thickness.", GH_ParamAccess.item, 1);
 
+            pManager[2].Optional = true;
             pManager[4].Optional = true;
             pManager[5].Optional = true;
             pManager[6].Optional = true;
@@ -165,6 +166,16 @@ namespace ACORNSpraying
             slices.Add(surf.Faces[0].CreateExtrusion(
                 new LineCurve(new Point3d(), (new Point3d()) + Vector3d.ZAxis * currThickness), true));
             thicknesses.Add(currThickness);
+
+            if (topSurf == null)
+            {
+                DA.SetDataList(0, paths);
+                DA.SetDataList(1, segments.SelectMany(x => x).ToList());
+                DA.SetDataList(2, isConnector.SelectMany(x => x).ToList());
+                DA.SetDataList(3, thicknesses);
+                DA.SetDataList(4, slices);
+                return;
+            }
 
             // Extrude the top surface to create a cutter
             var bBoxHeight = surf.GetBoundingBox(false).Diagonal.Z;
