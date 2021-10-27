@@ -93,7 +93,9 @@ namespace ACORNSpraying
 
             // Offset curve
             var bounds1 = perim.OffsetOnSurface(extSurf, dist, ToleranceDistance)[0];
+            bounds1.MakeClosed(ToleranceDistance);
             var bounds2 = perim.OffsetOnSurface(extSurf, -dist, ToleranceDistance)[0];
+            bounds2.MakeClosed(ToleranceDistance);
 
             if (AreaMassProperties.Compute(Curve.ProjectToPlane(bounds1, Plane.WorldXY)).Area >
                 AreaMassProperties.Compute(Curve.ProjectToPlane(bounds2, Plane.WorldXY)).Area)
@@ -287,6 +289,27 @@ namespace ACORNSpraying
             if (loops.Count == 0)
                 return null;
 
+            // Join consecutive loops if tangent is same
+            for (int i = 0; i < loops.Count - 1; i++)
+            {
+                if (loops[i].TangentAtEnd.IsParallelTo(loops[i].TangentAtStart) != 0)
+                {
+                    var joinedCurve = Curve.JoinCurves(
+                        new List<Curve>() { loops[i], loops[i + 1] },
+                        ToleranceDistance,
+                        false);
+                    
+                    if (joinedCurve.Length == 0)
+                    {
+                        joinedCurve[0].Simplify(CurveSimplifyOptions.Merge,
+                            ToleranceDistance,
+                            ToleranceAngle);
+                        loops[i] = joinedCurve[0];
+                        loops.RemoveAt(i + 1);
+                    }
+                }
+            }
+
             // Join curves in a loop increasing the tolerance if the curve isn't closed until it is
             double factor = 1.0;
             var curves = new Curve[0];
@@ -300,6 +323,7 @@ namespace ACORNSpraying
                 }
                 factor += 1;
             }
+
             return curves[0];
         }
     }

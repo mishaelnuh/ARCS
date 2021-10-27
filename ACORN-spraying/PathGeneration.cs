@@ -90,9 +90,6 @@ namespace ACORNSpraying
                 // Calculate ortho geodesic isolines
                 var path = OrthoGeodesics(geodesicsCurves, edges[i], dist);
 
-                // Filter curves
-                path = FilterCurvesByDistToSurf(path, surf, dist / 2 + Math.Abs(expandDist));
-
                 // Pull paths to surface and trim
                 path = path
                     .Select(p => extSurf.Pullback(p, ToleranceDistance))
@@ -114,19 +111,6 @@ namespace ACORNSpraying
 
                 if (dist2 < dist1)
                     path.Reverse();
-
-                // Replace the curve closest to the edge with the edge itself
-                var flag = true;
-                do
-                {
-                    int matchIndex;
-                    Point3d p1, p2;
-                    edges[i].ClosestPoints(path, out p1, out p2, out matchIndex);
-                    if (p1.DistanceToSquared(p2) < dist * dist / 4)
-                        path.RemoveAt(matchIndex);
-                    else
-                        flag = false;
-                } while (flag);
 
                 // Insert edge curve
                 path.Insert(0, edges[i]);
