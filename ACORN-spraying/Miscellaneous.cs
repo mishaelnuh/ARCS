@@ -92,13 +92,16 @@ namespace ACORNSpraying
             var perimLength = perim.GetLength();
 
             // Offset curve
-            var bounds = perim.OffsetOnSurface(extSurf, dist, ToleranceDistance)[0];
+            var bounds1 = perim.OffsetOnSurface(extSurf, dist, ToleranceDistance)[0];
+            bounds1.MakeClosed(ToleranceDistance);
+            var bounds2 = perim.OffsetOnSurface(extSurf, -dist, ToleranceDistance)[0];
+            bounds2.MakeClosed(ToleranceDistance);
 
-            // If the offset curve is shorter than surface perimeter, offset the other way
-            if (dist > 0 ^ bounds.GetLength() > perimLength)
-                bounds = perim.OffsetOnSurface(extSurf, -dist, ToleranceDistance)[0];
-
-            return bounds;
+            if (AreaMassProperties.Compute(Curve.ProjectToPlane(bounds1, Plane.WorldXY)).Area >
+                AreaMassProperties.Compute(Curve.ProjectToPlane(bounds2, Plane.WorldXY)).Area)
+                return bounds2;
+            else
+                return bounds1;
         }
 
         /// <summary>
@@ -177,6 +180,59 @@ namespace ACORNSpraying
         }
 
         /// <summary>
+        /// Trim curve by a Brep surface.
+        /// </summary>
+        /// <param name="curve">Curve to trim.</param>
+        /// <param name="boundary">Brep surface to trim with.</param>
+        /// <param name="insideCurves">Curves inside the boundary.</param>
+        /// <param name="outsideCurves">Curves outside the boundary.</param>
+        public static void TrimCurveSurface(Curve curve, Brep brep, out List<Curve> insideCurves, out List<Curve> outsideCurves)
+        {
+            var toleranceVec = new Vector3d(0, 0, ToleranceDistance);
+
+            // Get an extrusion to use as intersection Brep
+            var curveBounds = curve.GetBoundingBox(true);
+            var extrusionCurve = new LineCurve(new Point3d(), (new Point3d()) + Vector3d.ZAxis * ((curveBounds.Max.Z - curveBounds.Min.Z) * 10 + 4 * ToleranceDistance));
+            var extrusion = brep.Faces[0].CreateExtrusion(extrusionCurve, true);
+            extrusion.Translate(new Vector3d(0, 0, - (curveBounds.Max.Z - curveBounds.Min.Z) * 5 - 2 * ToleranceDistance));
+
+            // Get intersection parameters
+            var intersections = new List<double> { curve.Domain.Min };
+            var tmp = new double[0];
+            Rhino.Geometry.Intersect.Intersection.CurveBrep(
+                curve, extrusion, ToleranceDistance, ToleranceAngle, out tmp);
+            intersections.AddRange(tmp);
+            intersections.Add(curve.Domain.Max);
+            intersections = intersections.Distinct().ToList();
+            intersections.Sort();
+            
+            // Determine if inside of outside extrusion
+            insideCurves = new List<Curve>();
+            outsideCurves = new List<Curve>();
+
+            for (int i = 0; i < intersections.Count - 1; i++)
+            {
+                var c = curve.Trim(intersections[i], intersections[i + 1]);
+                if (extrusion.IsPointInside(c.PointAtNormalizedLength(0.5), ToleranceDistance, false))
+                    insideCurves.Add(c);
+                else
+                    outsideCurves.Add(c);
+            }
+
+            // Do check with a point outside extrusion and flip inside and outside depending on result
+            var checkPoint = new Point3d(curveBounds.Min.X - ToleranceDistance * 1e6, curveBounds.Min.Y - ToleranceDistance * 1e6, curveBounds.Min.Z - ToleranceDistance * 1e6);
+            if (extrusion.IsPointInside(checkPoint, ToleranceDistance, true))
+            {
+                var tmpList = outsideCurves;
+                outsideCurves = insideCurves;
+                insideCurves = tmpList;
+            }
+
+            outsideCurves = Curve.JoinCurves(outsideCurves).ToList();
+            insideCurves = Curve.JoinCurves(insideCurves).ToList();
+        }
+
+        /// <summary>
         /// Finds shortest subcurve in closed curve between parameters.
         /// </summary>
         /// <param name="curve">Closed curve.</param>
@@ -188,6 +244,11 @@ namespace ACORNSpraying
             var c0 = GetSubcurve(curve, t0, t1);
             var c1 = GetSubcurve(curve, t1, t0);
             c1.Reverse();
+
+            if (c0.PointAtStart.DistanceToSquared(c0.PointAtEnd) < ToleranceDistance * ToleranceDistance)
+                return new LineCurve(c0.PointAtStart, c0.PointAtEnd);
+            else if (c1.PointAtStart.DistanceToSquared(c1.PointAtEnd) < ToleranceDistance * ToleranceDistance)
+                return new LineCurve(c1.PointAtStart, c1.PointAtEnd);
 
             if (c0.GetLength() < c1.GetLength())
                 return c0;
@@ -216,12 +277,38 @@ namespace ACORNSpraying
             }
         }
 
+        /// <summary>
+        /// Get boundary outline of Brep surface. Assumes no holes.
+        /// </summary>
+        /// <param name="brep">Brep to find outline of.</param>
+        /// <returns>Outline curve.</returns>
         public static Curve Boundary(this Brep brep)
         {
             var loops = brep.GetWireframe(-1).Where(l => l != null).ToList();
 
             if (loops.Count == 0)
                 return null;
+
+            // Join consecutive loops if tangent is same
+            for (int i = 0; i < loops.Count - 1; i++)
+            {
+                if (loops[i].TangentAtEnd.IsParallelTo(loops[i].TangentAtStart) != 0)
+                {
+                    var joinedCurve = Curve.JoinCurves(
+                        new List<Curve>() { loops[i], loops[i + 1] },
+                        ToleranceDistance,
+                        false);
+                    
+                    if (joinedCurve.Length == 0)
+                    {
+                        joinedCurve[0].Simplify(CurveSimplifyOptions.Merge,
+                            ToleranceDistance,
+                            ToleranceAngle);
+                        loops[i] = joinedCurve[0];
+                        loops.RemoveAt(i + 1);
+                    }
+                }
+            }
 
             // Join curves in a loop increasing the tolerance if the curve isn't closed until it is
             double factor = 1.0;
@@ -236,6 +323,7 @@ namespace ACORNSpraying
                 }
                 factor += 1;
             }
+
             return curves[0];
         }
     }

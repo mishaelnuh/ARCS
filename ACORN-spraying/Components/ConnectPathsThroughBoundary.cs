@@ -10,7 +10,7 @@ namespace ACORNSpraying
 {
     public class ConnectGeometriesThroughBoundary : GH_Component
     {
-        public override GH_Exposure Exposure { get => GH_Exposure.secondary; }
+        public override GH_Exposure Exposure { get => GH_Exposure.primary; }
 
         public ConnectGeometriesThroughBoundary()
           : base("Connect Geometries Through Boundary", "ACORN_Connect",
