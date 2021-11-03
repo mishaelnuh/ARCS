@@ -10,11 +10,9 @@ namespace ACORNSpraying
 {
     public static class PathGeneration
     {
-        public static List<Curve> SprayInnerPaths(Brep surf, Surface extSurf, double dist, double expandDist, int numGeo, List<int> sourceEdges,
-            out List<List<Curve>> segments, out List<List<bool>> isConnector, out List<Curve> boundaryEdges)
+        public static List<SprayPath> SprayInnerPaths(Brep surf, Surface extSurf, double dist, double expandDist, int numGeo,
+            List<int> sourceEdges, List<Brep> speedRegions, List<double> spraySpeed, double connectorSpraySpeed, out List<Curve> boundaryEdges)
         {
-            segments = new List<List<Curve>>();
-            isConnector = new List<List<bool>>();
             boundaryEdges = new List<Curve>();
 
             // Find direction of spray paths to be used
@@ -68,7 +66,8 @@ namespace ACORNSpraying
                 })
                 .ToList();
 
-            var paths = new List<Curve>();
+            // Generate spray paths
+            var paths = new List<SprayPath>();
             var edgeCounter = -1;
             for (int i = 0; i < angles.Count; i++)
             {
@@ -97,7 +96,7 @@ namespace ACORNSpraying
                     .SelectMany(p =>
                     {
                         List<Curve> insideCurves;
-                        TrimCurveBoundary(p, boundary, out insideCurves, out _);
+                        TrimCurveBoundary(p, boundary, out insideCurves, out _, out _);
                         return insideCurves;
                     })
                     .ToList();
@@ -112,28 +111,59 @@ namespace ACORNSpraying
                 if (dist2 < dist1)
                     path.Reverse();
 
-                // Insert edge curve
-                path.Insert(0, edges[i]);
+                // Split the paths for speed purposes
+                if (speedRegions.Count > 0)
+                {
+                    foreach (var cutter in speedRegions)
+                    {
+                        for (int j = 0; j < path.Count; j++)
+                        {
+                            List<Curve> subcurves;
+                            TrimCurveSurface(path[j], cutter, out _, out _, out subcurves);
 
-                if (path[0].PointAtStart.DistanceToSquared(path[1].PointAtStart) > path[0].PointAtStart.DistanceToSquared(path[1].PointAtEnd))
-                    path[0].Reverse();
+                            path.RemoveAt(j);
+                            path.InsertRange(j, subcurves);
+                            j += subcurves.Count - 1;
+                        }
+                    }
+                }
 
                 // Connect paths together through the bounds
-                for (int j = 0; j < path.Count; j += 2)
-                    path[j].Reverse();
-
                 List<Curve> tmp1;
                 List<bool> tmp2;
-                var connectedPath = ConnectGeometriesThroughBoundary(
+                var connectedPath = ConnectGeometries(
                     path.Cast<GeometryBase>().ToList(),
-                    Enumerable.Repeat(false, path.Count).ToList(),
-                    boundary,
-                    false,
-                    out tmp1, out tmp2);
+                    Enumerable.Repeat(false, path.Count).ToList(), false,
+                    out tmp1, out tmp2, out _);
 
-                segments.Add(tmp1);
-                isConnector.Add(tmp2);
-                paths.Add(connectedPath);
+                // Convert geometry to spray paths and associate with speed
+                var sprayPath = new SprayPath();
+
+                foreach(var segment in tmp1.Zip(tmp2, (c, f) => new {Curve = c, IsConnector = f}))
+                {
+                    var sprayCurve = new SprayCurve(segment.Curve);
+                    sprayCurve.IsConnector = segment.IsConnector;
+
+                    if (sprayCurve.IsConnector)
+                        sprayCurve.Speed = connectorSpraySpeed;
+                    else
+                    {
+                        var midPoint = segment.Curve.PointAtNormalizedLength(0.5);
+                        var distances = speedRegions.Select(s => midPoint.DistanceToSquared(s.ClosestPoint(midPoint))).ToList();
+                        var minDistance = distances.Min();
+                        var speedRegionIndex = distances
+                            .Select((item, index) => new { Item = item, Index = index })
+                            .Where(x => Math.Abs(x.Item - minDistance) < ToleranceDistance * ToleranceDistance * 100)
+                            .First()
+                            .Index;
+
+                        sprayCurve.Speed = spraySpeed[speedRegionIndex];
+                    }
+
+                    sprayPath.Add(sprayCurve);
+                }
+
+                paths.Add(sprayPath);
 
                 boundaryEdges.Add(edges[i]);
             }
@@ -141,7 +171,7 @@ namespace ACORNSpraying
             return paths;
         }
 
-        public static Curve SprayEdgePath(Brep surf, Surface extSurf, Point3d startP, double expandDist)
+        public static SprayPath SprayEdgePath(Brep surf, Surface extSurf, Point3d startP, double expandDist, double spraySpeed)
         {
             var boundary = OffsetSurfBoundary(surf, extSurf, expandDist);
 
@@ -151,7 +181,14 @@ namespace ACORNSpraying
             boundary.ClosestPoint(startP, out t);
             boundary.ChangeClosedCurveSeam(t);
 
-            return boundary;
+            var sprayCurve = new SprayCurve(boundary);
+            sprayCurve.IsEdge = true;
+            sprayCurve.Speed = spraySpeed;
+
+            var sprayPath = new SprayPath();
+            sprayPath.Add(sprayCurve);
+
+            return sprayPath;
         }
 
         /// <summary>
@@ -309,6 +346,49 @@ namespace ACORNSpraying
             return orthoCut0;
         }
 
+        public static SprayPath ConnectSprayObjsThroughBoundary(List<object> sprayObjs, double connectorSpraySpeed, Brep surf, Surface extSurf, double dist, bool maintainDir)
+        {
+            var geometryObjects = sprayObjs
+                .Select(o => {
+                    if (o is SprayCurve)
+                        return (o as SprayCurve).Curve as GeometryBase;
+                    else if (o is Point)
+                        return o as GeometryBase;
+                    else
+                        throw new Exception("Only accepts SprayCurve or Point objects.");
+                }).ToList();
+            var flags = Enumerable.Repeat(false, geometryObjects.Count).ToList();
+
+            List<Curve> segments;
+            List<bool> isConnector;
+            List<int> originalIndex;
+
+            ConnectGeometriesThroughBoundary(geometryObjects, flags, surf, extSurf, dist, maintainDir, out segments, out isConnector, out originalIndex);
+
+            var sprayPath = new SprayPath();
+
+            for (int i = 0; i < segments.Count; i++)
+            {
+                if (isConnector[i])
+                {
+                    var sprayCurve = new SprayCurve(segments[i]);
+                    sprayCurve.Speed = connectorSpraySpeed;
+                    sprayCurve.IsConnector = true;
+
+                    sprayPath.Add(sprayCurve);
+                }
+                else
+                {
+                    var sprayCurve = (sprayObjs[originalIndex[i]] as SprayCurve).DeepClone();
+                    sprayCurve.Curve = segments[i];
+
+                    sprayPath.Add(sprayCurve);
+                }
+            }
+
+            return sprayPath;
+        }
+
         /// <summary>
         /// Connects geometries using sub curves of the bounds.
         /// </summary>
@@ -323,10 +403,10 @@ namespace ACORNSpraying
         /// <returns>Connected curve passing through geometries.</returns>
         public static Curve ConnectGeometriesThroughBoundary(List<GeometryBase> geometries, List<bool> isGeometryConnector,
             Brep surf, Surface extSurf, double dist,
-            bool maintainDir, out List<Curve> segments, out List<bool> isConnectorSegment)
+            bool maintainDir, out List<Curve> segments, out List<bool> isConnectorSegment, out List<int> originalIndex)
         {
             var boundary = OffsetSurfBoundary(surf, extSurf, dist);
-            return ConnectGeometriesThroughBoundary(geometries, isGeometryConnector, boundary, maintainDir, out segments, out isConnectorSegment);
+            return ConnectGeometriesThroughBoundary(geometries, isGeometryConnector, boundary, maintainDir, out segments, out isConnectorSegment, out originalIndex);
         }
 
         /// <summary>
@@ -341,10 +421,11 @@ namespace ACORNSpraying
         /// <returns>Connected curve passing through geometries.</returns>
         public static Curve ConnectGeometriesThroughBoundary(List<GeometryBase> geometries, List<bool> isGeometryConnector,
             Curve boundary, bool maintainDir,
-            out List<Curve> segments, out List<bool> isConnectorSegment)
+            out List<Curve> segments, out List<bool> isConnectorSegment, out List<int> originalIndex)
         {
             isConnectorSegment = new List<bool>();
             segments = new List<Curve>();
+            originalIndex = new List<int>();
 
             for (int i = 0; i < geometries.Count - 1; i++)
             {
@@ -353,6 +434,7 @@ namespace ACORNSpraying
                 if (typeof(Curve).IsAssignableFrom(geometries[i].GetType()))
                 {
                     segments.Add(geometries[i] as Curve);
+                    originalIndex.Add(i);
                     isConnectorSegment.Add(isGeometryConnector[i]);
                     pEnd = (geometries[i] as Curve).PointAtEnd;
                 }
@@ -408,16 +490,19 @@ namespace ACORNSpraying
                 if (pEnd.DistanceToSquared(connector.PointAtStart) > ToleranceDistance * ToleranceDistance)
                 {
                     segments.Add(new LineCurve(pEnd, connector.PointAtStart));
+                    originalIndex.Add(-1);
                     isConnectorSegment.Add(true);
                 }
                 if (connector.GetLength() > ToleranceDistance)
                 {
                     segments.Add(connector);
+                    originalIndex.Add(-1);
                     isConnectorSegment.Add(true);
                 }
                 if (pNext.DistanceToSquared(connector.PointAtEnd) > ToleranceDistance * ToleranceDistance)
                 {
                     segments.Add(new LineCurve(connector.PointAtEnd, pNext));
+                    originalIndex.Add(-1);
                     isConnectorSegment.Add(true);
                 }
             }
@@ -425,6 +510,7 @@ namespace ACORNSpraying
             if (typeof(Curve).IsAssignableFrom(geometries.Last().GetType()))
             {
                 segments.Add(geometries.Last() as Curve);
+                originalIndex.Add(geometries.Count - 1);
                 isConnectorSegment.Add(isGeometryConnector.Last());
             }
 
@@ -435,6 +521,49 @@ namespace ACORNSpraying
             return connectedGeometries;
         }
 
+        public static SprayPath ConnectSprayObjs(List<object> sprayObjs, double connectorSpraySpeed, bool maintainDir)
+        {
+            var geometryObjects = sprayObjs
+                .Select(o => {
+                    if (o is SprayCurve)
+                        return (o as SprayCurve).Curve as GeometryBase;
+                    else if (o is Point)
+                        return o as GeometryBase;
+                    else
+                        throw new Exception("Only accepts SprayCurve or Point objects.");
+                }).ToList();
+            var flags = Enumerable.Repeat(false, geometryObjects.Count).ToList();
+
+            List<Curve> segments;
+            List<bool> isConnector;
+            List<int> originalIndex;
+
+            ConnectGeometries(geometryObjects, flags, maintainDir, out segments, out isConnector, out originalIndex);
+
+            var sprayPath = new SprayPath();
+
+            for(int i = 0; i < segments.Count; i++)
+            {
+                if (isConnector[i])
+                {
+                    var sprayCurve = new SprayCurve(segments[i]);
+                    sprayCurve.Speed = connectorSpraySpeed;
+                    sprayCurve.IsConnector = true;
+
+                    sprayPath.Add(sprayCurve);
+                }
+                else
+                {
+                    var sprayCurve = (sprayObjs[originalIndex[i]] as SprayCurve).DeepClone();
+                    sprayCurve.Curve = segments[i];
+
+                    sprayPath.Add(sprayCurve);
+                }
+            }
+
+            return sprayPath;
+        }
+
         /// <summary>
         /// Connect geometries starting from the first using closest neighbour consecutively.
         /// </summary>
@@ -443,11 +572,12 @@ namespace ACORNSpraying
         /// <param name="segments">Curve segments exploded.</param>
         /// <param name="isConnectorSegment">Flags to show which segments are connectors.</param>
         /// <returns></returns>
-        public static Curve ConnectGeometries(List<GeometryBase> geometries, List<bool> isGeometryConnector,
-            out List<Curve> segments, out List<bool> isConnectorSegment)
+        public static Curve ConnectGeometries(List<GeometryBase> geometries, List<bool> isGeometryConnector, bool maintainDir,
+            out List<Curve> segments, out List<bool> isConnectorSegment, out List<int> originalIndex)
         {
             isConnectorSegment = new List<bool>();
             segments = new List<Curve>();
+            originalIndex = new List<int>();
 
             // Create map of key points
             // Skip fist one
@@ -461,9 +591,12 @@ namespace ACORNSpraying
                     var curve = (geometries[i] as Curve);
                     positions.Add(curve.PointAtStart);
                     indexedGeometries.Add(i);
-                    // Track a reversed curve by using negative indexes
-                    positions.Add(curve.PointAtEnd);
-                    indexedGeometries.Add(-i);
+                    if (!maintainDir)
+                    {
+                        // Track a reversed curve by using negative indexes
+                        positions.Add(curve.PointAtEnd);
+                        indexedGeometries.Add(-i);
+                    }
                 }
                 else if (geometries[i].GetType() == typeof(Point))
                 {
@@ -482,6 +615,7 @@ namespace ACORNSpraying
             {
                 currentPosition = (geometries[0] as Curve).PointAtEnd;
                 segments.Add((geometries[0] as Curve));
+                originalIndex.Add(0);
                 isConnectorSegment.Add(isGeometryConnector[0]);
             }
             else if (geometries[0].GetType() == typeof(Point))
@@ -525,6 +659,7 @@ namespace ACORNSpraying
                 if (nextStart.DistanceToSquared(currentPosition) > ToleranceDistance * ToleranceDistance)
                 {
                     segments.Add(new LineCurve(currentPosition, nextStart));
+                    originalIndex.Add(-1);
                     isConnectorSegment.Add(true);
                 }
 
@@ -532,10 +667,16 @@ namespace ACORNSpraying
                 {
                     // Add curve
                     segments.Add(nextCurve);
+                    originalIndex.Add(Math.Abs(index));
                     isConnectorSegment.Add(isGeometryConnector[Math.Abs(index)]);
 
                     // Remove curves from map
-                    if (index < 0)
+                    if (maintainDir)
+                    {
+                        positions.RemoveAt(closestIndex);
+                        indexedGeometries.RemoveAt(closestIndex);
+                    }
+                    else if (index < 0)
                     {
                         positions.RemoveAt(closestIndex);
                         indexedGeometries.RemoveAt(closestIndex);
@@ -568,11 +709,55 @@ namespace ACORNSpraying
             return connectedGeometries;
         }
 
+        public static SprayPath ConnectSprayObjsSequential(List<object> sprayObjs, double connectorSpraySpeed)
+        {
+            var geometryObjects = sprayObjs
+                .Select(o => {
+                    if (o is SprayCurve)
+                        return (o as SprayCurve).Curve as GeometryBase;
+                    else if (o is Point)
+                        return o as GeometryBase;
+                    else
+                        throw new Exception("Only accepts SprayCurve or Point objects.");
+                }).ToList();
+            var flags = Enumerable.Repeat(false, geometryObjects.Count).ToList();
+
+            List<Curve> segments;
+            List<bool> isConnector;
+            List<int> originalIndex;
+
+            ConnectGeometriesSequential(geometryObjects, flags, out segments, out isConnector, out originalIndex);
+
+            var sprayPath = new SprayPath();
+
+            for (int i = 0; i < segments.Count; i++)
+            {
+                if (isConnector[i])
+                {
+                    var sprayCurve = new SprayCurve(segments[i]);
+                    sprayCurve.Speed = connectorSpraySpeed;
+                    sprayCurve.IsConnector = true;
+
+                    sprayPath.Add(sprayCurve);
+                }
+                else
+                {
+                    var sprayCurve = (sprayObjs[originalIndex[i]] as SprayCurve).DeepClone();
+                    sprayCurve.Curve = segments[i];
+
+                    sprayPath.Add(sprayCurve);
+                }
+            }
+
+            return sprayPath;
+        }
+
         public static Curve ConnectGeometriesSequential(List<GeometryBase> geometries, List<bool> isGeometryConnector,
-            out List<Curve> segments, out List<bool> isConnectorSegment)
+            out List<Curve> segments, out List<bool> isConnectorSegment, out List<int> originalIndex)
         {
             isConnectorSegment = new List<bool>();
             segments = new List<Curve>();
+            originalIndex = new List<int>();
 
             // Loop through and find all connections
             Point3d currentPosition = new Point3d();
@@ -581,6 +766,7 @@ namespace ACORNSpraying
             {
                 currentPosition = (geometries[0] as Curve).PointAtEnd;
                 segments.Add((geometries[0] as Curve));
+                originalIndex.Add(0);
                 isConnectorSegment.Add(isGeometryConnector[0]);
             }
             else if (geometries[0].GetType() == typeof(Point))
@@ -612,16 +798,15 @@ namespace ACORNSpraying
                 if (nextStart.DistanceToSquared(currentPosition) > ToleranceDistance * ToleranceDistance)
                 {
                     segments.Add(new LineCurve(currentPosition, nextStart));
-                    if (geometries[i].GetType() == typeof(Point))
-                        isConnectorSegment.Add(isGeometryConnector[i]);
-                    else
-                        isConnectorSegment.Add(true);
+                    originalIndex.Add(-1);
+                    isConnectorSegment.Add(true);
                 }
 
                 if (nextCurve != null)
                 {
                     // Add curve
                     segments.Add(nextCurve);
+                    originalIndex.Add(i);
                     isConnectorSegment.Add(isGeometryConnector[i]);
                 }   
 

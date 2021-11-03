@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using static ACORNSpraying.PathGeneration;
+using Grasshopper.Kernel.Types;
 
 namespace ACORNSpraying
 {
@@ -22,46 +23,43 @@ namespace ACORNSpraying
 
         protected override void RegisterInputParams(GH_Component.GH_InputParamManager pManager)
         {
-            pManager.AddGenericParameter("geometries", "geometries", "Path geometries to connect", GH_ParamAccess.list);
-            pManager.AddBooleanParameter("isConnector", "isConnector", "Flags to see if geometry is a connector. Same length as geometries list.", GH_ParamAccess.list);
-
-            pManager[1].Optional = true;
+            pManager.AddGenericParameter("paths", "paths", "Spray paths or points to be connected.", GH_ParamAccess.list);
+            pManager.AddNumberParameter("connSpeed", "connSpeed", "Off path spraying speed.", GH_ParamAccess.item);
         }
 
         protected override void RegisterOutputParams(GH_Component.GH_OutputParamManager pManager)
         {
-            pManager.AddCurveParameter("segments", "segments", "Segmented spray path.", GH_ParamAccess.list);
-            pManager.AddBooleanParameter("isConnector", "isConnector", "Flags to see if curve segment is a connector.", GH_ParamAccess.list);
+            pManager.AddParameter(new Param_SprayPath(), "sprayPath", "sprayPath", "Spray paths", GH_ParamAccess.item);
         }
 
         protected override void SolveInstance(IGH_DataAccess DA)
         {
-            List<object> geometries = new List<object>();
-            List<bool> isConnector = new List<bool>();
+            List<object> paths = new List<object>();
+            double connSpeed = 0;
 
-            DA.GetDataList(0, geometries);
-            DA.GetDataList(1, isConnector);
+            DA.GetDataList(0, paths);
+            DA.GetData(1, ref connSpeed);
 
-            if (geometries.Count == 0)
+            if (paths.Count == 0)
                 return;
 
-            List<Curve> segments;
-            List<bool> connector;
-
-            ConnectGeometriesSequential(
-                geometries.Select(g =>
-                {
-                    if (g.GetType() == typeof(Grasshopper.Kernel.Types.GH_Curve))
-                        return (g as Grasshopper.Kernel.Types.GH_Curve).Value as GeometryBase;  
+            var sprayObjs = paths
+                .SelectMany(g => {
+                    if (g.GetType() == typeof(GH_ObjectWrapper))
+                        return ((g as GH_ObjectWrapper).Value as SprayPath).Select(c => c as object).ToList();
+                    else if (g.GetType() == typeof(GH_SprayPath))
+                        return ((g as GH_SprayPath).Value).Select(c => c as object).ToList();
                     else if (g.GetType() == typeof(Grasshopper.Kernel.Types.GH_Point))
-                        return new Point((g as Grasshopper.Kernel.Types.GH_Point).Value) as GeometryBase;
+                        return new List<object>() { new Point((g as Grasshopper.Kernel.Types.GH_Point).Value) as object };
                     else
                         return null;
-                }).ToList()
-                , isConnector, out segments, out connector);
+                })
+                .Where(x => x != null)
+                .ToList();
 
-            DA.SetDataList(0, segments);
-            DA.SetDataList(1, connector);
+            var path = ConnectSprayObjsSequential(sprayObjs, connSpeed);
+
+            DA.SetData(0, new GH_SprayPath(path));
         }
 
         protected override System.Drawing.Bitmap Icon

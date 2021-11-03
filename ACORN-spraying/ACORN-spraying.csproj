@@ -57,6 +57,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Components\ConnectGeometriesSequential.cs" />
+    <Compile Include="Components\ExtractTargets.cs" />
     <Compile Include="Components\SprayEdgePath.cs" />
     <Compile Include="Components\AlignNormals.cs" />
     <Compile Include="Components\SprayInnerPaths.cs" />
@@ -64,8 +65,10 @@
     <Compile Include="Components\ExtendSurf.cs" />
     <Compile Include="ACORNSprayingInfo.cs" />
     <Compile Include="Miscellaneous.cs" />
+    <Compile Include="Params\Param_SprayPath.cs" />
     <Compile Include="PathGeneration.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="SprayCurve.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

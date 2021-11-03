@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Runtime.Serialization.Formatters.Binary;
 using System.Text;
 using System.Threading.Tasks;
 using Rhino.Geometry;
@@ -133,7 +135,7 @@ namespace ACORNSpraying
         /// <param name="boundary">Closed curve to trim curve with.</param>
         /// <param name="insideCurves">Curves inside the boundary.</param>
         /// <param name="outsideCurves">Curves outside the boundary.</param>
-        public static void TrimCurveBoundary(Curve curve, Curve boundary, out List<Curve> insideCurves, out List<Curve> outsideCurves)
+        public static void TrimCurveBoundary(Curve curve, Curve boundary, out List<Curve> insideCurves, out List<Curve> outsideCurves, out List<Curve> subcurves)
         {
             var toleranceVec = new Vector3d(0, 0, ToleranceDistance);
 
@@ -156,6 +158,7 @@ namespace ACORNSpraying
             // Determine if inside of outside extrusion
             insideCurves = new List<Curve>();
             outsideCurves = new List<Curve>();
+            subcurves = new List<Curve>();
 
             for (int i = 0; i < intersections.Count - 1; i++)
             {
@@ -164,6 +167,7 @@ namespace ACORNSpraying
                     insideCurves.Add(c);
                 else
                     outsideCurves.Add(c);
+                subcurves.Add(c);
             }
 
             // Do check with a point outside extrusion and flip inside and outside depending on result
@@ -186,7 +190,7 @@ namespace ACORNSpraying
         /// <param name="boundary">Brep surface to trim with.</param>
         /// <param name="insideCurves">Curves inside the boundary.</param>
         /// <param name="outsideCurves">Curves outside the boundary.</param>
-        public static void TrimCurveSurface(Curve curve, Brep brep, out List<Curve> insideCurves, out List<Curve> outsideCurves)
+        public static void TrimCurveSurface(Curve curve, Brep brep, out List<Curve> insideCurves, out List<Curve> outsideCurves, out List<Curve> subcurves)
         {
             var toleranceVec = new Vector3d(0, 0, ToleranceDistance);
 
@@ -209,6 +213,7 @@ namespace ACORNSpraying
             // Determine if inside of outside extrusion
             insideCurves = new List<Curve>();
             outsideCurves = new List<Curve>();
+            subcurves = new List<Curve>();
 
             for (int i = 0; i < intersections.Count - 1; i++)
             {
@@ -217,6 +222,7 @@ namespace ACORNSpraying
                     insideCurves.Add(c);
                 else
                     outsideCurves.Add(c);
+                subcurves.Add(c);
             }
 
             // Do check with a point outside extrusion and flip inside and outside depending on result
@@ -325,6 +331,151 @@ namespace ACORNSpraying
             }
 
             return curves[0];
+        }
+
+        public static Vector3d AlignNormal(Brep surf, Point3d point, double angle, bool isOnEdge)
+        {
+            var edgeSprayPath = surf.Boundary();
+
+            // Check if not on surface boundary
+            var boundary2d = Curve.ProjectToPlane(edgeSprayPath, Plane.WorldXY);
+            var point2d = new Point3d(point);
+            point2d.Z = 0;
+
+            var containmentTest = boundary2d.Contains(point2d, Plane.WorldXY, ToleranceDistance);
+
+            double paramT;
+            edgeSprayPath.ClosestPoint(point, out paramT);
+
+            if (!isOnEdge)
+            {
+                if (containmentTest == PointContainment.Outside)
+                    return -Vector3d.ZAxis;
+                else
+                {
+                    var p = Rhino.Geometry.Intersect.Intersection.ProjectPointsToBreps(new List<Brep>() { surf }, new List<Point3d>() { point }, Vector3d.ZAxis, ToleranceDistance);
+
+                    double surfU, surfV;
+                    surf.Faces[0].ClosestPoint(p[0], out surfU, out surfV);
+                    var norm = surf.Faces[0].NormalAt(surfU, surfV);
+                    if (norm.Z > 0)
+                        norm.Reverse();
+
+                    return norm;
+                }
+            }
+            else
+            {
+                // Get normal of surface
+                double u, v;
+                surf.Surfaces[0].ClosestPoint(point, out u, out v);
+                var surfNorm = surf.Surfaces[0].NormalAt(u, v);
+                surfNorm.Unitize();
+
+                if (surfNorm.Z > 0)
+                    surfNorm.Reverse();
+
+                var boundarySegments = edgeSprayPath.DuplicateSegments();
+
+                var normalVecs = new List<Vector3d>();
+
+                double tmp;
+                edgeSprayPath.ClosestPoint(point, out tmp);
+                var distanceToEdge = edgeSprayPath.PointAt(tmp).DistanceTo(point);
+
+                foreach (var seg in boundarySegments)
+                {
+                    double t;
+                    if (seg.ClosestPoint(point, out t, distanceToEdge + ToleranceDistance))
+                    {
+                        var curveTangent = seg.TangentAt(t);
+
+                        // Check to make sure rotation will be in the right direction
+                        var testVector = Vector3d.CrossProduct(-surfNorm, curveTangent);
+                        var testPoint1 = point + testVector;
+                        var testPoint2 = point - testVector;
+
+                        testPoint1.Z = 0;
+
+                        if (boundary2d.Contains(testPoint1, Plane.WorldXY, ToleranceDistance) == PointContainment.Outside)
+                            curveTangent.Reverse();
+
+                        // Rotate surfNorm
+                        var norm = new Vector3d(surfNorm);
+                        norm.Rotate(-angle, curveTangent);
+                        norm.Unitize();
+
+                        normalVecs.Add(norm);
+                    }
+                }
+
+                // Add all the norms from boundary curves
+                var finalNorm = new Vector3d(0, 0, 0);
+                if (normalVecs.Count == 0)
+                {
+                    finalNorm = surfNorm;
+                }
+                else
+                {
+                    finalNorm += surfNorm;
+                    foreach (var n in normalVecs)
+                    {
+                        finalNorm += n;
+                        finalNorm -= surfNorm;
+                    }
+                    finalNorm.Unitize();
+                }
+
+                finalNorm.Unitize();
+
+                return finalNorm;
+            }
+        }
+
+        public static T DeepClone<T>(this T obj)
+        {
+            if (obj == null)
+                return default(T);
+
+            using (var ms = new MemoryStream())
+            {
+                var formatter = new BinaryFormatter();
+                formatter.Serialize(ms, obj);
+                ms.Position = 0;
+
+                return (T)formatter.Deserialize(ms);
+            }
+        }
+
+        /// <summary>
+        /// Serialise an object into a byte stream.
+        /// </summary>
+        /// <param name="obj">Object to serialise</param>
+        /// <returns>Byte stream</returns>
+        public static byte[] Serialise(this object obj)
+        {
+            using (var ms = new MemoryStream())
+            {
+                var formatter = new BinaryFormatter();
+                formatter.Serialize(ms, obj);
+                return ms.ToArray();
+            }
+        }
+
+        /// <summary>
+        /// Deserialise a byte stream into an object.
+        /// </summary>
+        /// <param name="stream">Byte stream</param>
+        /// <returns>Deserialised object</returns>
+        public static object Deserialise(this byte[] stream)
+        {
+            using (var ms = new MemoryStream())
+            {
+                ms.Write(stream, 0, stream.Length);
+                ms.Seek(0, SeekOrigin.Begin);
+                var formatter = new BinaryFormatter();
+                return formatter.Deserialize(ms);
+            }
         }
     }
 }

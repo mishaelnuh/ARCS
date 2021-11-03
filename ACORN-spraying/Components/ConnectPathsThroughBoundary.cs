@@ -21,71 +21,55 @@ namespace ACORNSpraying
 
         protected override void RegisterInputParams(GH_Component.GH_InputParamManager pManager)
         {
-            pManager.AddGeometryParameter("geometries", "geometries", "Geometries to connect. Only curves and points.", GH_ParamAccess.list);
-            pManager.AddBooleanParameter("isConnector", "isConnector", "Flag to show whether geometry is a connector. Should be same length as the geometries list.", GH_ParamAccess.list);
-            pManager.AddBooleanParameter("maintainDir", "maintainDir", "Maintain or flip curve directions.", GH_ParamAccess.item, false);
+            pManager.AddGenericParameter("paths", "paths", "Geometries to connect. Only curves and points.", GH_ParamAccess.list);
+            pManager.AddNumberParameter("connSpeed", "connSpeed", "Off path spraying speed.", GH_ParamAccess.item); 
             pManager.AddBrepParameter("surf", "surf", "Surface to extend. Input as Brep in order to maintain trims.", GH_ParamAccess.item);
             pManager.AddSurfaceParameter("extSurf", "extSurf", "Extended surface. Use ExtendSurf or untrim the Brep.", GH_ParamAccess.item);
             pManager.AddNumberParameter("expandDist", "expandDist", "Length to extend path lines past surface bounds.", GH_ParamAccess.item, 0);
 
-            pManager[1].Optional = true;
-            pManager[2].Optional = true;
-            pManager[5].Optional = true;
+            pManager[3].Optional = true;
         }
 
         protected override void RegisterOutputParams(GH_Component.GH_OutputParamManager pManager)
         {
-            pManager.AddCurveParameter("connectedPath", "connectedPath", "Connected curve.", GH_ParamAccess.item);
-            pManager.AddCurveParameter("segments", "segments", "Curve segments.", GH_ParamAccess.list);
-            pManager.AddBooleanParameter("isConnector", "isConnector", "Flags to see if curve segment is a connector.", GH_ParamAccess.list);
+            pManager.AddParameter(new Param_SprayPath(), "sprayPath", "sprayPath", "Spray paths", GH_ParamAccess.item);
         }
 
         protected override void SolveInstance(IGH_DataAccess DA)
         {
-            List<object> geometries = new List<object>();
-            List<bool> isGeoConnector = new List<bool>();
-            bool maintainDir = false;
+            List<object> paths = new List<object>();
+            double connSpeed = 0;
             Brep surf = null;
             Surface extSurf = null;
             double expandDist = 0;
 
-            DA.GetDataList(0, geometries);
-            DA.GetDataList(1, isGeoConnector);
-            DA.GetData(2, ref maintainDir);
-            DA.GetData(3, ref surf);
-            DA.GetData(4, ref extSurf);
-            DA.GetData(5, ref expandDist);
+            DA.GetDataList(0, paths);
+            DA.GetData(1, ref connSpeed);
+            DA.GetData(2, ref surf);
+            DA.GetData(3, ref extSurf);
+            DA.GetData(4, ref expandDist);
 
-            var castedGeometries = new List<GeometryBase>();
-            foreach (var g in geometries)
-            {
-                if (g == null)
-                    continue;
-                if (g.GetType() == typeof(GH_Point))
-                    castedGeometries.Add(new Point((g as GH_Point).Value));
-                else if (g.GetType() == typeof(GH_Curve))
-                    castedGeometries.Add((g as GH_Curve).Value);
-            }
+            if (paths.Count == 0)
+                return;
 
-            if (castedGeometries.Count != isGeoConnector.Count)
-            {
-                // If no connector list passed that all geometries are not connectors
-                if (isGeoConnector.Count == 0)
-                    isGeoConnector = Enumerable.Repeat(false, castedGeometries.Count).ToList();
-                else
-                {
-                    this.AddRuntimeMessage(GH_RuntimeMessageLevel.Error, "Connector flag list length does not match geometry list length.");
-                    return;
-                }
-            }
+            var sprayObjs = paths
+                .SelectMany(g => {
+                    if (g.GetType() == typeof(GH_ObjectWrapper))
+                        return ((g as GH_ObjectWrapper).Value as SprayPath).Select(c => c as object).ToList();
+                    else if (g.GetType() == typeof(GH_SprayPath))
+                        return ((g as GH_SprayPath).Value).Select(c => c as object).ToList();
+                    else if (g.GetType() == typeof(Grasshopper.Kernel.Types.GH_Point))
+                        return new List<object>() { new Point((g as Grasshopper.Kernel.Types.GH_Point).Value) as object };
+                    else
+                        return null;
+                })
+                .Where(x => x != null)
+                .ToList();
 
-            List<Curve> segments;
-            List<bool> isResConnector;
-            var res = ConnectGeometriesThroughBoundary(castedGeometries, isGeoConnector, surf, extSurf, expandDist, maintainDir, out segments, out isResConnector);
 
-            DA.SetData(0, res);
-            DA.SetDataList(1, segments);
-            DA.SetDataList(2, isResConnector);
+            var path = ConnectSprayObjsThroughBoundary(sprayObjs, connSpeed, surf, extSurf, expandDist, true);
+
+            DA.SetData(0, new GH_SprayPath(path));
         }
 
         protected override System.Drawing.Bitmap Icon
