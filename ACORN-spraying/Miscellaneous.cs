@@ -190,9 +190,9 @@ namespace ACORNSpraying
         {
             // Get an extrusion to use as intersection Brep
             var curveBounds = curve.GetBoundingBox(true);
-            var extrusionCurve = new LineCurve(new Point3d(), (new Point3d()) + Vector3d.ZAxis * ((curveBounds.Max.Z - curveBounds.Min.Z) * 10 + 4 * ToleranceDistance));
+            var extrusionCurve = new LineCurve(new Point3d(), (new Point3d()) + Vector3d.ZAxis * ((curveBounds.Max.Z - curveBounds.Min.Z) * 100 + 4 * ToleranceDistance));
             var extrusion = brep.Faces[0].CreateExtrusion(extrusionCurve, true);
-            extrusion.Translate(new Vector3d(0, 0, - (curveBounds.Max.Z - curveBounds.Min.Z) * 5 - 2 * ToleranceDistance));
+            extrusion.Translate(new Vector3d(0, 0, - (curveBounds.Max.Z - curveBounds.Min.Z) * 50 - 2 * ToleranceDistance));
 
             // Get intersection parameters
             var intersections = new List<double> { curve.Domain.Min };
@@ -335,8 +335,6 @@ namespace ACORNSpraying
             var point2d = new Point3d(point) { Z = 0 };
 
             var containmentTest = boundary2d.Contains(point2d, Plane.WorldXY, ToleranceDistance);
-
-            edgeSprayPath.ClosestPoint(point, out _);
 
             if (!isOnEdge)
             {

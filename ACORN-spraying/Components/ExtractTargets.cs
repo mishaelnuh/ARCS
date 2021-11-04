@@ -33,10 +33,12 @@ namespace ACORNSpraying
             pManager.AddAngleParameter("edgeAngle", "edgeAngle", "Angle to apply at edge.", GH_ParamAccess.item, 10);
             pManager.AddNumberParameter("tolD", "tolD", "Tolerance distance for discretisation.", GH_ParamAccess.item, 10);
             pManager.AddNumberParameter("tolA", "tolA", "Tolerance angle for discretisation.", GH_ParamAccess.item, 10);
+            pManager.AddNumberParameter("safeSpeed", "safeSpeed", "Speed for outside of surface.", GH_ParamAccess.item, 300);
 
             pManager[3].Optional = true;
             pManager[4].Optional = true;
             pManager[5].Optional = true;
+            pManager[6].Optional = true;
         }
 
         protected override void RegisterOutputParams(GH_Component.GH_OutputParamManager pManager)
@@ -63,6 +65,8 @@ namespace ACORNSpraying
             double angle = 0;
             double tolD = 0;
             double tolA = 0;
+            double safeSpeed = 0;
+
 
             DA.GetData(0, ref pathRaw);
             DA.GetData(1, ref surf);
@@ -70,6 +74,7 @@ namespace ACORNSpraying
             DA.GetData(3, ref angle);
             DA.GetData(4, ref tolD);
             DA.GetData(5, ref tolA);
+            DA.GetData(6, ref safeSpeed);
 
             if (UseDegrees)
                 angle *= Math.PI / 180;
@@ -108,7 +113,14 @@ namespace ACORNSpraying
 
                     targets.Add(target);
                     normals.Add(AlignNormal(surf, target, angle, path[i].IsEdge || distLength <= edgeDist + ToleranceDistance));
-                    speeds.Add(path[i].Speed);
+
+                    // Check if not on surface boundary
+                    var boundary2d = Curve.ProjectToPlane(surf.Boundary(), Plane.WorldXY);
+                    var point2d = new Point3d(target) { Z = 0 };
+
+                    var containmentTest = boundary2d.Contains(point2d, Plane.WorldXY, ToleranceDistance);
+
+                    speeds.Add(containmentTest == PointContainment.Outside ? safeSpeed : path[i].Speed);
                 }
             }
 
