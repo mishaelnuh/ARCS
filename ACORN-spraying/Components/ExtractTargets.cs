@@ -16,7 +16,7 @@ namespace ACORNSpraying
     {
         public override GH_Exposure Exposure { get => GH_Exposure.secondary; }
 
-        private bool useDegrees { get; set; } = false;
+        private bool UseDegrees { get; set; } = false;
 
         public ExtractTargets()
           : base("Extract Targets", "ACORN_Extract",
@@ -50,10 +50,9 @@ namespace ACORNSpraying
         {
             base.BeforeSolveInstance();
 
-            useDegrees = false;
-            Param_Number angleParameter = Params.Input[3] as Param_Number;
-            if (angleParameter != null)
-                useDegrees = angleParameter.UseDegrees;
+            UseDegrees = false;
+            if (Params.Input[3] is Param_Number angleParameter)
+                UseDegrees = angleParameter.UseDegrees;
         }
 
         protected override void SolveInstance(IGH_DataAccess DA)
@@ -72,7 +71,7 @@ namespace ACORNSpraying
             DA.GetData(4, ref tolD);
             DA.GetData(5, ref tolA);
 
-            if (useDegrees)
+            if (UseDegrees)
                 angle *= Math.PI / 180;
 
             var path = (pathRaw as GH_SprayPath).Value;
@@ -96,11 +95,11 @@ namespace ACORNSpraying
 
                 foreach(var target in polyline)
                 {
-                    double tmp, borderU, borderV, targetU, targetV;
-
-                    surfBoundary.ClosestPoint(target, out tmp);
-                    surf.Faces[0].ClosestPoint(surfBoundary.PointAt(tmp), out borderU, out borderV);
-                    surf.Faces[0].ClosestPoint(target, out targetU, out targetV);
+                    surfBoundary.ClosestPoint(target, out double tmp);
+                    surf.Faces[0].ClosestPoint(surfBoundary.PointAt(tmp),
+                        out double borderU, out double borderV);
+                    surf.Faces[0].ClosestPoint(target,
+                        out double targetU, out double targetV);
 
                     var distLength = surf.Faces[0].ShortPath(
                         new Point2d(borderU, borderV),

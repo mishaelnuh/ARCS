@@ -14,9 +14,6 @@ namespace ACORNSpraying
     {
         public override GH_Exposure Exposure { get => GH_Exposure.primary; }
 
-        private BoundingBox clippingBox;
-        public override BoundingBox ClippingBox => clippingBox;
-        
         public List<Curve> SurfEdges { get; set; }
         public List<double> EdgeId { get; set; }
 
@@ -104,15 +101,12 @@ namespace ACORNSpraying
                 speedRegions.Add(surf);
             }
 
-            List<List<Curve>> baseSegments;
-            List<List<bool>> baseIsConnector;
             List<Brep> slices = new List<Brep>();
             List<double> thicknesses = new List<double>();
 
-            List<Curve> surfEdges;
             var basePaths = SprayInnerPaths(surf, extSurf, dist, expandDist, (int)numGeo,
                 sourceEdges.Select(x => (int)x).ToList(),
-                speedRegions, speeds, connSpeed, out surfEdges);
+                speedRegions, speeds, connSpeed, out List<Curve> surfEdges, out List<SprayPath> repeatPaths);
             
             SurfEdges = surfEdges;
             EdgeId = sourceEdges;
@@ -128,12 +122,10 @@ namespace ACORNSpraying
                 // Add first path
                 for (int i = 0; i < pathRepeat; i++)
                 {
-                    var duplicatePath = basePaths.First().DeepClone();
-
-                    if (i % 2 == 1)
-                        duplicatePath.Reverse();
-
-                    paths.Add(duplicatePath);
+                    if (i % 2 == 0)
+                        paths.Add(basePaths.First().DeepClone());
+                    else
+                        paths.Add(repeatPaths.First().DeepClone());
                 }
 
                 // Calculate base thickness
@@ -183,8 +175,8 @@ namespace ACORNSpraying
                         var p = points
                             .Zip(closestPoints, (p1, p2) => new
                             {
-                                p1 = p1,
-                                p2 = p2,
+                                p1,
+                                p2,
                             })
                             .OrderByDescending(item => item.p1.DistanceToSquared(item.p2))
                             .First();
@@ -206,12 +198,11 @@ namespace ACORNSpraying
                 List<Brep> addedSlices = new List<Brep>();
                 foreach (var splitSurf in splitSurface)
                 {
-                    List<Curve> trimmedPaths = new List<Curve>();
-                    List<List<Curve>> trimmedSegments = new List<List<Curve>>();
-                    List<List<bool>> trimmedConnector = new List<List<bool>>();
-
                     // Trim base segments to create new segments and path
                     var importantSegments = new List<SprayCurve>();
+
+                    // Trim repeat segments to create new segments and path
+                    var importantRepeatSegments = new List<SprayCurve>();
 
                     int trialSegment = currSegmentUsed;
                     do
@@ -219,11 +210,13 @@ namespace ACORNSpraying
                         var noConnectorPaths = basePaths[trialSegment].DeepClone();
                         noConnectorPaths.TrimConnectors();
 
+                        var noConnectorRepeatPaths = repeatPaths[trialSegment].DeepClone();
+                        noConnectorRepeatPaths.TrimConnectors();
+
                         // Trim segments with surface
                         foreach (var sprayCurve in noConnectorPaths)
                         {
-                            List<Curve> insideCurves;
-                            Miscellaneous.TrimCurveSurface(sprayCurve.Curve, splitSurf, out insideCurves, out _, out _);
+                            Miscellaneous.TrimCurveSurface(sprayCurve.Curve, splitSurf, out List<Curve> insideCurves, out _, out _);
                             var sprayCurves = insideCurves
                                 .Select(c => {
                                     var tmp = sprayCurve.DeepClone();
@@ -234,52 +227,99 @@ namespace ACORNSpraying
                             importantSegments.AddRange(sprayCurves);
                         }
 
-                        // If no segments we try a different segment path
-                        if (importantSegments.Count == 0)
+                        if (pathRepeat > 1)
                         {
-                            trialSegment++;
-                            if (trialSegment >= basePaths.Count)
-                                trialSegment = 0;
+                            // Trim repeat segments with surface
+                            foreach (var sprayCurve in noConnectorRepeatPaths)
+                            {
+                                Miscellaneous.TrimCurveSurface(sprayCurve.Curve, splitSurf, out List<Curve> insideCurves, out _, out _);
+                                var sprayCurves = insideCurves
+                                    .Select(c =>
+                                    {
+                                        var tmp = sprayCurve.DeepClone();
+                                        tmp.Curve = c;
+                                        return tmp;
+                                    })
+                                    .ToList();
+                                importantRepeatSegments.AddRange(sprayCurves);
+                            }
                         }
-                        // If total length is too short also try a different segment path
-                        else if (importantSegments.Select(s => s.Curve.GetLength()).Sum() <= dist)
+
+                        if (pathRepeat <= 1)
                         {
-                            importantSegments = new List<SprayCurve>();
-                            trialSegment++;
-                            if (trialSegment >= basePaths.Count)
-                                trialSegment = 0;
+                            // If no segments we try a different segment path
+                            if (importantSegments.Count == 0)
+                            {
+                                trialSegment++;
+                                if (trialSegment >= basePaths.Count)
+                                    trialSegment = 0;
+                            }
+                            // If total length is too short also try a different segment path
+                            else if (importantSegments.Select(s => s.Curve.GetLength()).Sum() <= dist)
+                            {
+                                importantSegments = new List<SprayCurve>();
+                                trialSegment++;
+                                if (trialSegment >= basePaths.Count)
+                                    trialSegment = 0;
+                            }
                         }
-                    } while (trialSegment != currSegmentUsed && importantSegments.Count == 0);
+                        else
+                        {
+                            // If no segments we try a different segment path
+                            if (importantSegments.Count + importantRepeatSegments.Count == 0)
+                            {
+                                trialSegment++;
+                                if (trialSegment >= basePaths.Count)
+                                    trialSegment = 0;
+                            }
+                            // If total length is too short also try a different segment path
+                            else if (importantSegments.Select(s => s.Curve.GetLength()).Sum() + importantRepeatSegments.Select(s => s.Curve.GetLength()).Sum() <= dist)
+                            {
+                                importantSegments = new List<SprayCurve>();
+                                importantRepeatSegments = new List<SprayCurve>();
+                                trialSegment++;
+                                if (trialSegment >= basePaths.Count)
+                                    trialSegment = 0;
+                            }
+                        }
+                    } while (trialSegment != currSegmentUsed &&
+                        ((importantSegments.Count == 0 && pathRepeat <= 1) ||
+                        (importantSegments.Count == 0 && importantRepeatSegments.Count == 0 && pathRepeat > 1)));
 
                     // If no segments we continue. Other segments may still be useful.
-                    if (importantSegments.Count == 0)
+                    if ((importantSegments.Count == 0 && pathRepeat <= 1) ||
+                        (importantSegments.Count == 0 && importantRepeatSegments.Count == 0 && pathRepeat > 1))
                         continue;
 
-                    List <Curve> newTrimmedSegments;
-                    List<bool> newTrimmedConnector;
                     var newPath = ConnectSprayObjs(importantSegments.Select(s => s as object).ToList(), connSpeed, false);
+                    var newRepeatPath = ConnectSprayObjs(importantRepeatSegments.Select(s => s as object).ToList(), connSpeed, false);
 
                     // If too short, we also continue
-                    if (newPath.GetLength() <= dist)
+                    if (newPath.GetLength()  + (pathRepeat > 1 ? newRepeatPath.GetLength() : 0) <= dist)
                         continue;
 
                     // Shift segments and curve to current thickness
                     newPath.Translate(0, 0, currThickness);
-
-                    // Repeat paths
-                    PolyCurve repeatedJoinedCurve = new PolyCurve();
-                    List<Curve> repeatedTrimmedSegments = new List<Curve>();
-                    List<bool> repeatedTrimmedConnector = new List<bool>();
+                    newRepeatPath.Translate(0, 0, currThickness);
 
                     // Add first path
                     for (int i = 0; i < pathRepeat; i++)
                     {
-                        var duplicatePath = newPath.DeepClone();
+                        if (i % 2 == 0)
+                        {
+                            if (newPath.Count > 0)
+                                paths.Add(newPath.DeepClone());
+                            else
+                                paths.Add(newRepeatPath.DeepClone());
 
-                        if (i % 2 == 1)
-                            duplicatePath.Reverse();
-
-                        paths.Add(duplicatePath);
+                        }
+                        else
+                        {
+                            if (newRepeatPath.Count > 0)
+                                paths.Add(newRepeatPath.DeepClone());
+                            else
+                                paths.Add(newPath.DeepClone());
+                        }
                     }
 
                     addedSlices.Add(splitSurf);

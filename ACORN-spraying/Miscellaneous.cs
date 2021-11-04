@@ -91,8 +91,6 @@ namespace ACORNSpraying
             if (dist == 0)
                 return perim;
 
-            var perimLength = perim.GetLength();
-
             // Offset curve
             var bounds1 = perim.OffsetOnSurface(extSurf, dist, ToleranceDistance)[0];
             bounds1.MakeClosed(ToleranceDistance);
@@ -119,8 +117,7 @@ namespace ACORNSpraying
 
             foreach (var c in curves)
             {
-                Point3d p1, p2;
-                c.ClosestPoints(new List<GeometryBase>() { surf }, out p1, out p2, out _);
+                c.ClosestPoints(new List<GeometryBase>() { surf }, out Point3d p1, out Point3d p2, out _);
                 if (p1.DistanceToSquared(p2) <= dist * dist)
                     filteredCurves.Add(c);
             }
@@ -148,9 +145,8 @@ namespace ACORNSpraying
 
             // Get intersection parameters
             var intersections = new List<double> { curve.Domain.Min };
-            var tmp = new double[0];
             Rhino.Geometry.Intersect.Intersection.CurveBrep(
-                curve, extrusion, ToleranceDistance, ToleranceAngle, out tmp);
+                curve, extrusion, ToleranceDistance, ToleranceAngle, out double[] tmp);
             intersections.AddRange(tmp);
             intersections.Add(curve.Domain.Max);
             intersections = intersections.Distinct().ToList();
@@ -192,8 +188,6 @@ namespace ACORNSpraying
         /// <param name="outsideCurves">Curves outside the boundary.</param>
         public static void TrimCurveSurface(Curve curve, Brep brep, out List<Curve> insideCurves, out List<Curve> outsideCurves, out List<Curve> subcurves)
         {
-            var toleranceVec = new Vector3d(0, 0, ToleranceDistance);
-
             // Get an extrusion to use as intersection Brep
             var curveBounds = curve.GetBoundingBox(true);
             var extrusionCurve = new LineCurve(new Point3d(), (new Point3d()) + Vector3d.ZAxis * ((curveBounds.Max.Z - curveBounds.Min.Z) * 10 + 4 * ToleranceDistance));
@@ -202,9 +196,8 @@ namespace ACORNSpraying
 
             // Get intersection parameters
             var intersections = new List<double> { curve.Domain.Min };
-            var tmp = new double[0];
             Rhino.Geometry.Intersect.Intersection.CurveBrep(
-                curve, extrusion, ToleranceDistance, ToleranceAngle, out tmp);
+                curve, extrusion, ToleranceDistance, ToleranceAngle, out double[] tmp);
             intersections.AddRange(tmp);
             intersections.Add(curve.Domain.Max);
             intersections = intersections.Distinct().ToList();
@@ -339,13 +332,11 @@ namespace ACORNSpraying
 
             // Check if not on surface boundary
             var boundary2d = Curve.ProjectToPlane(edgeSprayPath, Plane.WorldXY);
-            var point2d = new Point3d(point);
-            point2d.Z = 0;
+            var point2d = new Point3d(point) { Z = 0 };
 
             var containmentTest = boundary2d.Contains(point2d, Plane.WorldXY, ToleranceDistance);
 
-            double paramT;
-            edgeSprayPath.ClosestPoint(point, out paramT);
+            edgeSprayPath.ClosestPoint(point, out _);
 
             if (!isOnEdge)
             {
@@ -355,8 +346,7 @@ namespace ACORNSpraying
                 {
                     var p = Rhino.Geometry.Intersect.Intersection.ProjectPointsToBreps(new List<Brep>() { surf }, new List<Point3d>() { point }, Vector3d.ZAxis, ToleranceDistance);
 
-                    double surfU, surfV;
-                    surf.Faces[0].ClosestPoint(p[0], out surfU, out surfV);
+                    surf.Faces[0].ClosestPoint(p[0], out double surfU, out double surfV);
                     var norm = surf.Faces[0].NormalAt(surfU, surfV);
                     if (norm.Z > 0)
                         norm.Reverse();
@@ -367,8 +357,7 @@ namespace ACORNSpraying
             else
             {
                 // Get normal of surface
-                double u, v;
-                surf.Surfaces[0].ClosestPoint(point, out u, out v);
+                surf.Surfaces[0].ClosestPoint(point, out double u, out double v);
                 var surfNorm = surf.Surfaces[0].NormalAt(u, v);
                 surfNorm.Unitize();
 
@@ -379,21 +368,18 @@ namespace ACORNSpraying
 
                 var normalVecs = new List<Vector3d>();
 
-                double tmp;
-                edgeSprayPath.ClosestPoint(point, out tmp);
+                edgeSprayPath.ClosestPoint(point, out double tmp);
                 var distanceToEdge = edgeSprayPath.PointAt(tmp).DistanceTo(point);
 
                 foreach (var seg in boundarySegments)
                 {
-                    double t;
-                    if (seg.ClosestPoint(point, out t, distanceToEdge + ToleranceDistance))
+                    if (seg.ClosestPoint(point, out double t, distanceToEdge + ToleranceDistance))
                     {
                         var curveTangent = seg.TangentAt(t);
 
                         // Check to make sure rotation will be in the right direction
                         var testVector = Vector3d.CrossProduct(-surfNorm, curveTangent);
                         var testPoint1 = point + testVector;
-                        var testPoint2 = point - testVector;
 
                         testPoint1.Z = 0;
 
@@ -417,11 +403,9 @@ namespace ACORNSpraying
                 }
                 else
                 {
-                    finalNorm += surfNorm;
                     foreach (var n in normalVecs)
                     {
                         finalNorm += n;
-                        finalNorm -= surfNorm;
                     }
                     finalNorm.Unitize();
                 }
@@ -435,7 +419,7 @@ namespace ACORNSpraying
         public static T DeepClone<T>(this T obj)
         {
             if (obj == null)
-                return default(T);
+                return default;
 
             using (var ms = new MemoryStream())
             {

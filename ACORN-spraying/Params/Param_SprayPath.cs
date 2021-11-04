@@ -96,8 +96,6 @@ namespace ACORNSpraying
         public BoundingBox Preview(IGH_PreviewArgs args, bool selected)
         {
             var selectedColor = Color.Green;
-            var minSpeed = Value.MinSpeed;
-            var maxSpeed = Value.MaxSpeed;
 
             if (Value == null)
                 return new BoundingBox();
