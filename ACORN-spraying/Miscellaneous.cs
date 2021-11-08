@@ -389,7 +389,7 @@ namespace ACORNSpraying
 
                         // Rotate surfNorm
                         var norm = new Vector3d(surfNorm);
-                        norm.Rotate(-angle, curveTangent);
+                        norm.Rotate(angle, curveTangent);
                         norm.Unitize();
 
                         normalVecs.Add(norm);
