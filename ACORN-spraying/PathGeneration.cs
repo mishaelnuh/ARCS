@@ -71,6 +71,10 @@ namespace ACORNSpraying
             var paths = new List<SprayPath>();
             repeatPaths = new List<SprayPath>();
 
+            var pathsDict = new Dictionary<int, SprayPath>();
+            var repeatPathsDict = new Dictionary<int, SprayPath>();
+            var boundaryEdgesDict = new Dictionary<int, Curve>();
+
             var edgeCounter = -1;
             for (int i = 0; i < angles.Count; i++)
             {
@@ -214,10 +218,16 @@ namespace ACORNSpraying
                     sprayRepeatPath.Add(sprayCurve);
                 }
 
-                paths.Add(sprayPath);
-                repeatPaths.Add(sprayRepeatPath);
+                pathsDict[edgeCounter] = sprayPath;
+                repeatPathsDict[edgeCounter] = sprayRepeatPath;
+                boundaryEdgesDict[edgeCounter] = edges[i];
+            }
 
-                boundaryEdges.Add(edges[i]);
+            foreach(var e in sourceEdges)
+            {
+                paths.Add(pathsDict[e]);
+                repeatPaths.Add(repeatPathsDict[e]);
+                boundaryEdges.Add(boundaryEdgesDict[e]);
             }
 
             return paths;
