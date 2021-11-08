@@ -240,6 +240,9 @@ namespace ACORNSpraying
         /// <returns>Subcurve.</returns>
         public static Curve ShortestSubcurve(Curve curve, double t0, double t1)
         {
+            if (curve.PointAt(t0).DistanceToSquared(curve.PointAt(t1)) < ToleranceDistance * ToleranceDistance)
+                return new LineCurve(curve.PointAt(t0), curve.PointAt(t1));
+
             var c0 = GetSubcurve(curve, t0, t1);
             var c1 = GetSubcurve(curve, t1, t0);
             c1.Reverse();

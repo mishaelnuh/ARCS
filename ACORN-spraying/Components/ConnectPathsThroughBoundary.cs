@@ -26,8 +26,12 @@ namespace ACORNSpraying
             pManager.AddBrepParameter("surf", "surf", "Surface to extend. Input as Brep in order to maintain trims.", GH_ParamAccess.item);
             pManager.AddSurfaceParameter("extSurf", "extSurf", "Extended surface. Use ExtendSurf or untrim the Brep.", GH_ParamAccess.item);
             pManager.AddNumberParameter("expandDist", "expandDist", "Length to extend path lines past surface bounds.", GH_ParamAccess.item, 0);
+            pManager.AddBooleanParameter("maintainDir", "maintainDir", "Maintain connection direction or not.", GH_ParamAccess.item, false);
+            pManager.AddBooleanParameter("keepConn", "keepConn", "Keep the old connectors or not.", GH_ParamAccess.item, true);
 
             pManager[3].Optional = true;
+            pManager[5].Optional = true;
+            pManager[6].Optional = true;
         }
 
         protected override void RegisterOutputParams(GH_Component.GH_OutputParamManager pManager)
@@ -42,12 +46,16 @@ namespace ACORNSpraying
             Brep surf = null;
             Surface extSurf = null;
             double expandDist = 0;
+            bool maintainDir = false;
+            bool keepConn = false;
 
             DA.GetDataList(0, paths);
             DA.GetData(1, ref connSpeed);
             DA.GetData(2, ref surf);
             DA.GetData(3, ref extSurf);
             DA.GetData(4, ref expandDist);
+            DA.GetData(5, ref maintainDir);
+            DA.GetData(6, ref keepConn);
 
             if (paths.Count == 0)
                 return;
@@ -55,19 +63,31 @@ namespace ACORNSpraying
             var sprayObjs = paths
                 .SelectMany(g => {
                     if (g.GetType() == typeof(GH_ObjectWrapper))
-                        return ((g as GH_ObjectWrapper).Value as SprayPath).Select(c => c as object).ToList();
+                    {
+                        var sprayPaths = ((g as GH_ObjectWrapper).Value as SprayPath).Select(x => x).ToList();
+                        if (!keepConn)
+                            sprayPaths = sprayPaths.Where(x => !x.IsConnector).ToList();
+
+                        return sprayPaths.Select(c => c as object).ToList();
+                    }
                     else if (g.GetType() == typeof(GH_SprayPath))
-                        return ((g as GH_SprayPath).Value).Select(c => c as object).ToList();
+                    {
+                        var sprayPaths = (g as GH_SprayPath).Value.Select(x => x).ToList();
+                        if (!keepConn)
+                            sprayPaths = sprayPaths.Where(x => !x.IsConnector).ToList();
+
+                        return sprayPaths.Select(c => c as object).ToList();
+                    }
                     else if (g.GetType() == typeof(Grasshopper.Kernel.Types.GH_Point))
                         return new List<object>() { new Point((g as Grasshopper.Kernel.Types.GH_Point).Value) as object };
                     else
-                        return null;
+                        return new List<object>();
                 })
                 .Where(x => x != null)
                 .ToList();
 
 
-            var path = ConnectSprayObjsThroughBoundary(sprayObjs, connSpeed, surf, extSurf, expandDist, true);
+            var path = ConnectSprayObjsThroughBoundary(sprayObjs, connSpeed, surf, extSurf, expandDist, maintainDir);
 
             DA.SetData(0, new GH_SprayPath(path));
         }

@@ -759,7 +759,7 @@ namespace ACORNSpraying
             return connectedGeometries;
         }
 
-        public static SprayPath ConnectSprayObjsSequential(List<object> sprayObjs, double connectorSpraySpeed)
+        public static SprayPath ConnectSprayObjsSequential(List<object> sprayObjs, double connectorSpraySpeed, bool maintainDir)
         {
             if (sprayObjs.Count == 0)
                 return new SprayPath();
@@ -775,7 +775,7 @@ namespace ACORNSpraying
                 }).ToList();
             var flags = Enumerable.Repeat(false, geometryObjects.Count).ToList();
 
-            ConnectGeometriesSequential(geometryObjects, flags,
+            ConnectGeometriesSequential(geometryObjects, flags, maintainDir,
                 out List<Curve> segments, out List<bool> isConnector, out List<int> originalIndex);
 
             var sprayPath = new SprayPath();
@@ -804,7 +804,7 @@ namespace ACORNSpraying
         }
 
         public static Curve ConnectGeometriesSequential(List<GeometryBase> geometries, List<bool> isGeometryConnector,
-            out List<Curve> segments, out List<bool> isConnectorSegment, out List<int> originalIndex)
+            bool maintainDir, out List<Curve> segments, out List<bool> isConnectorSegment, out List<int> originalIndex)
         {
             isConnectorSegment = new List<bool>();
             segments = new List<Curve>();
@@ -836,8 +836,26 @@ namespace ACORNSpraying
                     var curve = geometries[i] as Curve;
                     nextCurve = curve.DuplicateCurve();
 
-                    nextPosition = curve.PointAtEnd;
-                    nextStart = curve.PointAtStart;
+                    if (maintainDir)
+                    {
+                        nextPosition = curve.PointAtEnd;
+                        nextStart = curve.PointAtStart;
+                    }
+                    else
+                    {
+                        if (curve.PointAtEnd.DistanceToSquared(currentPosition) < curve.PointAtStart.DistanceToSquared(currentPosition))
+                        {
+                            nextCurve.Reverse();
+                            nextPosition = curve.PointAtStart;
+                            nextStart = curve.PointAtEnd;
+                        }
+                        else
+                        {
+                            nextPosition = curve.PointAtEnd;
+                            nextStart = curve.PointAtStart;
+                        }
+                    }
+
                 }
                 else if (geometries[i].GetType() == typeof(Point))
                 {
