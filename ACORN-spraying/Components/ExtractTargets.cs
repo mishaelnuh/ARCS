@@ -86,8 +86,9 @@ namespace ACORNSpraying
             List<double> speeds = new List<double>();
 
             var surfBoundary = surf.Boundary();
+            var boundary2d = Curve.ProjectToPlane(surfBoundary, Plane.WorldXY);
 
-            for(int i = 0; i < path.Count; i++)
+            for (int i = 0; i < path.Count; i++)
             {
                 var polylineCurve = path[i].Curve.ToPolyline(tolD, tolA, 0, path[i].Curve.GetLength());
                 polylineCurve.RemoveShortSegments(ToleranceDistance * 10);
@@ -115,9 +116,7 @@ namespace ACORNSpraying
                     normals.Add(AlignNormal(surf, target, angle, path[i].IsEdge || distLength <= edgeDist + ToleranceDistance));
 
                     // Check if not on surface boundary
-                    var boundary2d = Curve.ProjectToPlane(surf.Boundary(), Plane.WorldXY);
                     var point2d = new Point3d(target) { Z = 0 };
-
                     var containmentTest = boundary2d.Contains(point2d, Plane.WorldXY, ToleranceDistance);
 
                     speeds.Add(containmentTest == PointContainment.Outside ? safeSpeed : path[i].Speed);

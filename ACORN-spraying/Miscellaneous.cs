@@ -380,7 +380,9 @@ namespace ACORNSpraying
 
                         // Check to make sure rotation will be in the right direction
                         var testVector = Vector3d.CrossProduct(-surfNorm, curveTangent);
-                        var testPoint1 = point + testVector;
+                        testVector.Unitize();
+
+                        var testPoint1 = point + testVector * Math.Max(distanceToEdge * 2, ToleranceDistance * 10);
 
                         testPoint1.Z = 0;
 
@@ -389,7 +391,7 @@ namespace ACORNSpraying
 
                         // Rotate surfNorm
                         var norm = new Vector3d(surfNorm);
-                        norm.Rotate(angle, curveTangent);
+                        norm.Rotate(-angle, curveTangent);
                         norm.Unitize();
 
                         normalVecs.Add(norm);
