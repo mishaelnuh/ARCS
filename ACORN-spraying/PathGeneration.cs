@@ -189,7 +189,7 @@ namespace ACORNSpraying
                 // Connect repeat paths together through the bounds
                 var connectedRepeatPath = ConnectGeometries(
                     repeatPath.Cast<GeometryBase>().ToList(),
-                    Enumerable.Repeat(false, path.Count).ToList(), false,
+                    Enumerable.Repeat(false, repeatPath.Count).ToList(), false,
                     out tmp1, out tmp2, out _);
 
                 // Convert geometry to spray paths and associate with speed

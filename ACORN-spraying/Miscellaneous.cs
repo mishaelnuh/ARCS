@@ -190,14 +190,28 @@ namespace ACORNSpraying
         {
             // Get an extrusion to use as intersection Brep
             var curveBounds = curve.GetBoundingBox(true);
-            var extrusionCurve = new LineCurve(new Point3d(), (new Point3d()) + Vector3d.ZAxis * ((curveBounds.Max.Z - curveBounds.Min.Z) * 100 + 4 * ToleranceDistance));
-            var extrusion = brep.Faces[0].CreateExtrusion(extrusionCurve, true);
-            extrusion.Translate(new Vector3d(0, 0, - (curveBounds.Max.Z - curveBounds.Min.Z) * 50 - 2 * ToleranceDistance));
+            var duplicateBrep = brep.DuplicateBrep();
+            var surfBounds = duplicateBrep.GetBoundingBox(true);
+            duplicateBrep.Translate(new Vector3d(0, 0, (curveBounds.Min.Z - surfBounds.Max.Z)) * 2);
+            surfBounds = duplicateBrep.GetBoundingBox(true);
+            var extrusionCurve = new LineCurve(new Point3d(), (new Point3d()) + Vector3d.ZAxis * (curveBounds.Max.Z - surfBounds.Min.Z) * 2);
+            var extrusion1 = duplicateBrep.Faces[0].CreateExtrusion(extrusionCurve, true);
+
+            // Also get boundary curve because brep intersection is unreliable
+            var boundary = brep.Boundary();
+            var toleranceVec = new Vector3d(0, 0, ToleranceDistance);
+            var basePlane = new Plane(curveBounds.Min - 2 * toleranceVec, Vector3d.ZAxis);
+            var projectedBounds = Curve.ProjectToPlane(boundary, basePlane);
+            var extrudeDir = new Vector3d(0, 0, curveBounds.Max.Z - curveBounds.Min.Z + 4 * ToleranceDistance);
+            var extrusion2 = Surface.CreateExtrusion(projectedBounds, extrudeDir).ToBrep().CapPlanarHoles(ToleranceDistance);
 
             // Get intersection parameters
             var intersections = new List<double> { curve.Domain.Min };
             Rhino.Geometry.Intersect.Intersection.CurveBrep(
-                curve, extrusion, ToleranceDistance, ToleranceAngle, out double[] tmp);
+                curve, extrusion1, ToleranceDistance, ToleranceAngle, out double[] tmp);
+            intersections.AddRange(tmp);
+            Rhino.Geometry.Intersect.Intersection.CurveBrep(
+                curve, extrusion2, ToleranceDistance, ToleranceAngle, out tmp);
             intersections.AddRange(tmp);
             intersections.Add(curve.Domain.Max);
             intersections = intersections.Distinct().ToList();
@@ -211,16 +225,19 @@ namespace ACORNSpraying
             for (int i = 0; i < intersections.Count - 1; i++)
             {
                 var c = curve.Trim(intersections[i], intersections[i + 1]);
-                if (extrusion.IsPointInside(c.PointAtNormalizedLength(0.5), ToleranceDistance, false))
-                    insideCurves.Add(c);
-                else
-                    outsideCurves.Add(c);
-                subcurves.Add(c);
+                if (c != null)
+                {
+                    if (extrusion1.IsPointInside(c.PointAtNormalizedLength(0.5), ToleranceDistance, false))
+                        insideCurves.Add(c);
+                    else
+                        outsideCurves.Add(c);
+                    subcurves.Add(c);
+                }
             }
 
             // Do check with a point outside extrusion and flip inside and outside depending on result
             var checkPoint = new Point3d(curveBounds.Min.X - ToleranceDistance * 1e6, curveBounds.Min.Y - ToleranceDistance * 1e6, curveBounds.Min.Z - ToleranceDistance * 1e6);
-            if (extrusion.IsPointInside(checkPoint, ToleranceDistance, true))
+            if (extrusion1.IsPointInside(checkPoint, ToleranceDistance, true))
             {
                 var tmpList = outsideCurves;
                 outsideCurves = insideCurves;
