@@ -345,6 +345,8 @@ namespace ACORNSpraying
                     var extrusion = splitSurf.Faces[0].CreateExtrusion(
                         new LineCurve(new Point3d(), (new Point3d()) + Vector3d.ZAxis * addedThickness), true);
                     extrusion.Translate(0, 0, currThickness);
+                    if (!extrusion.IsValid)
+                        extrusion.Repair(Miscellaneous.ToleranceDistance);
                     slices.Add(extrusion);
                     thicknesses.Add(currThickness + addedThickness);
                 }
