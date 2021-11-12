@@ -58,6 +58,7 @@
   <ItemGroup>
     <Compile Include="Components\ConnectGeometriesSequential.cs" />
     <Compile Include="Components\ExtractTargets.cs" />
+    <Compile Include="Components\PathProperties.cs" />
     <Compile Include="Components\SprayEdgePath.cs" />
     <Compile Include="Components\SprayInnerPaths.cs" />
     <Compile Include="Components\ConnectPathsThroughBoundary.cs" />
