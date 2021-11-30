@@ -6,6 +6,7 @@ using System.Runtime.Serialization.Formatters.Binary;
 using System.Text;
 using System.Threading.Tasks;
 using Rhino.Geometry;
+using static ACORNSpraying.PathGeneration;
 
 namespace ACORNSpraying
 {
@@ -104,6 +105,32 @@ namespace ACORNSpraying
                 return bounds1;
         }
 
+        public static List<Curve> OffsetSurfHoles(Brep surf, Surface extSurf, double dist)
+        {
+            var holes = surf.Holes();
+
+            if (dist == 0)
+                return holes;
+
+            // Offset curve
+            var offsetHoles = new List<Curve>();
+            foreach (var h in holes)
+            {
+                var bounds1 = h.OffsetOnSurface(extSurf, dist, ToleranceDistance)[0];
+                bounds1.MakeClosed(ToleranceDistance);
+                var bounds2 = h.OffsetOnSurface(extSurf, -dist, ToleranceDistance)[0];
+                bounds2.MakeClosed(ToleranceDistance);
+
+                if (AreaMassProperties.Compute(Curve.ProjectToPlane(bounds1, Plane.WorldXY)).Area <
+                    AreaMassProperties.Compute(Curve.ProjectToPlane(bounds2, Plane.WorldXY)).Area)
+                    offsetHoles.Add(bounds2);
+                else
+                    offsetHoles.Add(bounds1);
+            }
+
+            return offsetHoles;
+        }
+
         /// <summary>
         /// Filters curves to be within a specified distance to surface.
         /// </summary>
@@ -161,6 +188,9 @@ namespace ACORNSpraying
             for (int i = 0; i < intersections.Count - 1; i++)
             {
                 var c = curve.Trim(intersections[i], intersections[i + 1]);
+                if (c == null)
+                    continue;
+
                 if (extrusion.IsPointInside(c.PointAtNormalizedLength(0.5), ToleranceDistance, false))
                     insideCurves.Add(c);
                 else
@@ -210,7 +240,7 @@ namespace ACORNSpraying
             intersections.Add(curve.Domain.Max);
             intersections = intersections.Distinct().ToList();
             intersections.Sort();
-            
+
             // Determine if inside of outside extrusion
             insideCurves = new List<Curve>();
             outsideCurves = new List<Curve>();
@@ -291,53 +321,60 @@ namespace ACORNSpraying
         }
 
         /// <summary>
-        /// Get boundary outline of Brep surface. Assumes no holes.
+        /// Get boundary outline of Brep surface.
         /// </summary>
         /// <param name="brep">Brep to find outline of.</param>
         /// <returns>Outline curve.</returns>
         public static Curve Boundary(this Brep brep)
         {
-            var loops = brep.GetWireframe(-1).Where(l => l != null).ToList();
+            return brep.Faces[0].OuterLoop.To3dCurve();
+        }
 
-            if (loops.Count == 0)
-                return null;
+        /// <summary>
+        /// Get hole outlines of Brep surface.
+        /// </summary>
+        /// <param name="brep">Brep to find outline of.</param>
+        /// <returns>Outline curve.</returns>
+        public static List<Curve> Holes(this Brep brep)
+        {
+            var loops = brep.Faces[0].Loops
+                .Where(x => x.LoopType != BrepLoopType.Outer)
+                .Select(x => x.To3dCurve())
+                .ToList();
 
-            // Join consecutive loops if tangent is same
-            for (int i = 0; i < loops.Count - 1; i++)
+            return loops;
+        }
+
+        public static Curve AvoidHoles(this Curve curve, List<Curve> holes)
+        {
+            foreach (var hole in holes)
             {
-                if (loops[i].TangentAtEnd.IsParallelTo(loops[i].TangentAtStart) != 0)
+                TrimCurveBoundary(curve, hole, out List<Curve> insideCurves, out List<Curve> outsideCurves, out _);
+
+                // Assume only intersection with one hole
+                if (insideCurves.Count > 0 && outsideCurves.Count > 0)
                 {
-                    var joinedCurve = Curve.JoinCurves(
-                        new List<Curve>() { loops[i], loops[i + 1] },
-                        ToleranceDistance,
-                        false);
-                    
-                    if (joinedCurve.Length == 0)
-                    {
-                        joinedCurve[0].Simplify(CurveSimplifyOptions.Merge,
-                            ToleranceDistance,
-                            ToleranceAngle);
-                        loops[i] = joinedCurve[0];
-                        loops.RemoveAt(i + 1);
-                    }
+                    return ConnectGeometriesThroughBoundary(
+                        new List<GeometryBase>()
+                        {
+                            new Point(curve.PointAtStart),
+                            new Point(curve.PointAtEnd),
+                        },
+                        new List<bool>()
+                        {
+                            true,
+                            true
+                        },
+                        hole,
+                        false,
+                        out _,
+                        out _,
+                        out _
+                    );
                 }
             }
 
-            // Join curves in a loop increasing the tolerance if the curve isn't closed until it is
-            double factor = 1.0;
-            var curves = new Curve[0];
-            while (factor <= 100)
-            {
-                curves = Curve.JoinCurves(loops, ToleranceDistance * factor, false);
-                if (curves.Length == 1)
-                {
-                    if (curves[0].IsClosed)
-                        break;
-                }
-                factor += 1;
-            }
-
-            return curves[0];
+            return curve;
         }
 
         public static Vector3d AlignNormal(Brep surf, Point3d point, double angle, bool isOnEdge)
@@ -357,6 +394,9 @@ namespace ACORNSpraying
                 else
                 {
                     var p = Rhino.Geometry.Intersect.Intersection.ProjectPointsToBreps(new List<Brep>() { surf }, new List<Point3d>() { point }, Vector3d.ZAxis, ToleranceDistance);
+
+                    if (p.Length == 0)
+                        return -Vector3d.ZAxis;
 
                     surf.Faces[0].ClosestPoint(p[0], out double surfU, out double surfV);
                     var norm = surf.Faces[0].NormalAt(surfU, surfV);

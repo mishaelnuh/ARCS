@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using static ACORNSpraying.Miscellaneous;
 
 namespace ACORNSpraying
 {
@@ -157,6 +158,26 @@ namespace ACORNSpraying
         public void TrimConnectors()
         {
             sprayCurves = sprayCurves.Where(x => !x.IsConnector).ToList();
+        }
+
+        public void AvoidHoles(Brep surf, Surface extSurf, double dist)
+        {
+            var holes = OffsetSurfHoles(surf, extSurf, dist);
+
+            foreach (var c in sprayCurves)
+            {
+                if (c.IsConnector)
+                    c.Curve = c.Curve.AvoidHoles(holes);
+            }
+        }
+
+        public void AvoidHoles(List<Curve> holes)
+        {
+            foreach (var c in sprayCurves)
+            {
+                if (c.IsConnector)
+                    c.Curve = c.Curve.AvoidHoles(holes);
+            }
         }
 
         public Point3d PointAtStart()

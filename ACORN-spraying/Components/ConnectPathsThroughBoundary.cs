@@ -88,6 +88,7 @@ namespace ACORNSpraying
 
 
             var path = ConnectSprayObjsThroughBoundary(sprayObjs, connSpeed, surf, extSurf, expandDist, maintainDir);
+            path.AvoidHoles(surf, extSurf, expandDist);
 
             DA.SetData(0, new GH_SprayPath(path));
         }

@@ -27,6 +27,12 @@ namespace ACORNSpraying
             {
                 edges = (boundary as PolyCurve).Explode().ToList();
             }
+            else if (boundary is NurbsCurve)
+            {
+                edges = (boundary as NurbsCurve).DuplicateSegments().ToList();
+            }
+
+            var holes = OffsetSurfHoles(surf, extSurf, expandDist);
 
             // Ignore corners from offset surf boundary
             int skipOffset = 0;
@@ -94,7 +100,7 @@ namespace ACORNSpraying
                 var geodesicsCurves = Geodesics(surf, extSurf, plane, numGeo);
 
                 // Calculate ortho geodesic isolines
-                var path = OrthoGeodesics(geodesicsCurves, edges[i], dist / 2);
+                var path = PathsFromGeodesic(geodesicsCurves, edges[i], dist / 2);
 
                 // Pull paths to surface and trim
                 path = path
@@ -106,6 +112,18 @@ namespace ACORNSpraying
                         return insideCurves;
                     })
                     .ToList();
+
+                // Remove paths in holes
+                foreach (var h in holes)
+                {
+                    path = path
+                        .SelectMany(p =>
+                        {
+                            TrimCurveBoundary(p, h, out _, out List<Curve> outsideCurves, out _);
+                            return outsideCurves;
+                        })
+                        .ToList();
+                }
 
                 // Align path order
                 edges[i].ClosestPoints(new List<GeometryBase>() { path[0] }, out Point3d pT1, out Point3d pT2, out _);
@@ -168,7 +186,10 @@ namespace ACORNSpraying
                     var sprayCurve = new SprayCurve(segment.Curve) { IsConnector = segment.IsConnector };
 
                     if (sprayCurve.IsConnector)
+                    {
+                        sprayCurve.Curve = segment.Curve.AvoidHoles(holes);
                         sprayCurve.Speed = connectorSpraySpeed;
+                    }
                     else
                     {
                         var midPoint = segment.Curve.PointAtNormalizedLength(0.5);
@@ -200,7 +221,10 @@ namespace ACORNSpraying
                     var sprayCurve = new SprayCurve(segment.Curve) { IsConnector = segment.IsConnector };
 
                     if (sprayCurve.IsConnector)
+                    {
+                        sprayCurve.Curve = segment.Curve.AvoidHoles(holes);
                         sprayCurve.Speed = connectorSpraySpeed;
+                    }
                     else
                     {
                         var midPoint = segment.Curve.PointAtNormalizedLength(0.5);
@@ -223,11 +247,23 @@ namespace ACORNSpraying
                 boundaryEdgesDict[edgeCounter] = edges[i];
             }
 
-            foreach(var e in sourceEdges)
+            if (sourceEdges.Count > 0)
             {
-                paths.Add(pathsDict[e]);
-                repeatPaths.Add(repeatPathsDict[e]);
-                boundaryEdges.Add(boundaryEdgesDict[e]);
+                foreach (var e in sourceEdges)
+                {
+                    paths.Add(pathsDict[e]);
+                    repeatPaths.Add(repeatPathsDict[e]);
+                    boundaryEdges.Add(boundaryEdgesDict[e]);
+                }
+            }
+            else
+            {
+                foreach (var k in pathsDict.Keys)
+                {
+                    paths.Add(pathsDict[k]);
+                    repeatPaths.Add(repeatPathsDict[k]);
+                    boundaryEdges.Add(boundaryEdgesDict[k]);
+                }
             }
 
             return paths;
@@ -361,7 +397,7 @@ namespace ACORNSpraying
         /// <param name="guide">Guiding curve.</param>
         /// <param name="dist">Distance between isolines.</param>
         /// <returns>Equally spaced isolines generated.</returns>
-        public static List<Curve> OrthoGeodesics(List<Curve> geodesics, Curve guide, double dist)
+        public static List<Curve> PathsFromGeodesic(List<Curve> geodesics, Curve guide, double dist)
         {
             var geoBounds = new BoundingBox();
             foreach (var g in geodesics)

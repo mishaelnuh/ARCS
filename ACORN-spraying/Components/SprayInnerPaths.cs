@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using static ACORNSpraying.PathGeneration;
+using static ACORNSpraying.Miscellaneous;
 
 namespace ACORNSpraying
 {
@@ -149,6 +150,8 @@ namespace ACORNSpraying
                 .CreateExtrusion(
                     new LineCurve(new Point3d(0, 0, 0), new Point3d(0, 0, bBoxHeight * 10)),
                     true);
+
+            var holes = OffsetSurfHoles(surf, extSurf, expandDist);
 
             // Loop through thickness
             bool loopFlag = true;
@@ -293,6 +296,8 @@ namespace ACORNSpraying
 
                     var newPath = ConnectSprayObjs(importantSegments.Select(s => s as object).ToList(), connSpeed, false);
                     var newRepeatPath = ConnectSprayObjs(importantRepeatSegments.Select(s => s as object).ToList(), connSpeed, false);
+                    newPath.AvoidHoles(holes);
+                    newRepeatPath.AvoidHoles(holes);
 
                     // If too short, we also continue
                     if (newPath.GetLength()  + (pathRepeat > 1 ? newRepeatPath.GetLength() : 0) <= dist)
@@ -339,6 +344,12 @@ namespace ACORNSpraying
 
                 // Divide added thickness by total area
                 addedThickness /= addedSlices.Select(s => s.GetArea()).Sum();
+
+                if (addedThickness == 0)
+                {
+                    loopFlag = false;
+                    break;
+                }
 
                 foreach (var splitSurf in addedSlices)
                 {
