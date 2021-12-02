@@ -46,6 +46,7 @@ namespace ACORNSpraying
                 var testPoint = perim.PointAtStart;
                 var midPoints = new PointCloud(edges.Select(e => e.PointAtNormalizedLength(0.5)));
                 var closestIndex = midPoints.ClosestPoint(testPoint);
+
                 if (closestIndex % 2 == 1)
                     skipOffset = 1;
             }
@@ -102,8 +103,30 @@ namespace ACORNSpraying
                 // Calculate ortho geodesic isolines
                 var path = PathsFromGeodesic(geodesicsCurves, edges[i], dist / 2);
 
+                // Split into base path and repeat paths
+                var repeatPath = path
+                    .Select((curve, index) => new { Index = index, Value = curve })
+                    .Where(x => x.Index % 2 == 1)
+                    .Select(x => x.Value)
+                    .ToList();
+                repeatPath.Reverse();
+                path = path
+                    .Select((curve, index) => new { Index = index, Value = curve })
+                    .Where(x => x.Index % 2 == 0)
+                    .Select(x => x.Value)
+                    .ToList();
+
                 // Pull paths to surface and trim
                 path = path
+                    .Select(p => extSurf.Pullback(p, ToleranceDistance))
+                    .Select(p => extSurf.Pushup(p, ToleranceDistance))
+                    .SelectMany(p =>
+                    {
+                        TrimCurveBoundary(p, boundary, out List<Curve> insideCurves, out _, out _);
+                        return insideCurves;
+                    })
+                    .ToList();
+                repeatPath = repeatPath
                     .Select(p => extSurf.Pullback(p, ToleranceDistance))
                     .Select(p => extSurf.Pushup(p, ToleranceDistance))
                     .SelectMany(p =>
@@ -123,6 +146,13 @@ namespace ACORNSpraying
                             return outsideCurves;
                         })
                         .ToList();
+                    repeatPath = repeatPath
+                        .SelectMany(p =>
+                        {
+                            TrimCurveBoundary(p, h, out _, out List<Curve> outsideCurves, out _);
+                            return outsideCurves;
+                        })
+                        .ToList();
                 }
 
                 // Align path order
@@ -134,18 +164,14 @@ namespace ACORNSpraying
                 if (dist2 < dist1)
                     path.Reverse();
 
-                // Split into base path and repeat paths
-                var repeatPath = path
-                    .Select((curve, index) => new { Index = index, Value = curve })
-                    .Where(x => x.Index % 2 == 1)
-                    .Select(x => x.Value)
-                    .ToList();
-                repeatPath.Reverse();
-                path = path
-                    .Select((curve, index) => new { Index = index, Value = curve })
-                    .Where(x => x.Index % 2 == 0)
-                    .Select(x => x.Value)
-                    .ToList();
+                edges[i].ClosestPoints(new List<GeometryBase>() { repeatPath[0] }, out pT1, out pT2, out _);
+                dist1 = pT1.DistanceToSquared(pT2);
+                edges[i].ClosestPoints(new List<GeometryBase>() { repeatPath.Last() }, out pT1, out pT2, out _);
+                dist2 = pT1.DistanceToSquared(pT2);
+
+                if (dist2 < dist1)
+                    repeatPath.Reverse();
+
 
                 // Split the paths for speed purposes
                 if (speedRegions.Count > 0)
@@ -156,6 +182,8 @@ namespace ACORNSpraying
                         {
                             TrimCurveSurface(path[j], cutter, out _, out _, out List<Curve> subcurves);
 
+                            subcurves = subcurves.Where(x => x.GetLength() > ToleranceDistance).ToList();
+
                             path.RemoveAt(j);
                             path.InsertRange(j, subcurves);
                             j += subcurves.Count - 1;
@@ -165,12 +193,18 @@ namespace ACORNSpraying
                         {
                             TrimCurveSurface(repeatPath[j], cutter, out _, out _, out List<Curve> subcurves);
 
+                            subcurves = subcurves.Where(x => x.GetLength() > ToleranceDistance).ToList();
+
                             repeatPath.RemoveAt(j);
                             repeatPath.InsertRange(j, subcurves);
                             j += subcurves.Count - 1;
                         }
                     }
                 }
+
+                // Remove any small paths
+                path = path.Where(x => x.GetLength() > ToleranceDistance && x.GetLength() > dist / 10).ToList();
+                repeatPath = repeatPath.Where(x => x.GetLength() > ToleranceDistance && x.GetLength() > dist / 10).ToList();
 
                 // Connect paths together through the bounds
                 var connectedPath = ConnectGeometries(
