@@ -98,11 +98,22 @@ namespace ACORNSpraying
             var bounds2 = perim.OffsetOnSurface(extSurf, -dist, ToleranceDistance)[0];
             bounds2.MakeClosed(ToleranceDistance);
 
-            if (AreaMassProperties.Compute(Curve.ProjectToPlane(bounds1, Plane.WorldXY)).Area >
-                AreaMassProperties.Compute(Curve.ProjectToPlane(bounds2, Plane.WorldXY)).Area)
-                return bounds2;
+            if (dist < 0)
+            {
+                if (AreaMassProperties.Compute(Curve.ProjectToPlane(bounds1, Plane.WorldXY)).Area >
+                    AreaMassProperties.Compute(Curve.ProjectToPlane(bounds2, Plane.WorldXY)).Area)
+                    return bounds2;
+                else
+                    return bounds1;
+            }
             else
-                return bounds1;
+            {
+                if (AreaMassProperties.Compute(Curve.ProjectToPlane(bounds1, Plane.WorldXY)).Area >
+                    AreaMassProperties.Compute(Curve.ProjectToPlane(bounds2, Plane.WorldXY)).Area)
+                    return bounds1;
+                else
+                    return bounds2;
+            }
         }
 
         public static List<Curve> OffsetSurfHoles(Brep surf, Surface extSurf, double dist)
@@ -121,11 +132,23 @@ namespace ACORNSpraying
                 var bounds2 = h.OffsetOnSurface(extSurf, -dist, ToleranceDistance)[0];
                 bounds2.MakeClosed(ToleranceDistance);
 
-                if (AreaMassProperties.Compute(Curve.ProjectToPlane(bounds1, Plane.WorldXY)).Area <
-                    AreaMassProperties.Compute(Curve.ProjectToPlane(bounds2, Plane.WorldXY)).Area)
-                    offsetHoles.Add(bounds2);
+                if (dist < 0)
+                {
+                    if (AreaMassProperties.Compute(Curve.ProjectToPlane(bounds1, Plane.WorldXY)).Area <
+                        AreaMassProperties.Compute(Curve.ProjectToPlane(bounds2, Plane.WorldXY)).Area)
+                        offsetHoles.Add(bounds2);
+                    else
+                        offsetHoles.Add(bounds1);
+                }
                 else
-                    offsetHoles.Add(bounds1);
+                {
+                    if (AreaMassProperties.Compute(Curve.ProjectToPlane(bounds1, Plane.WorldXY)).Area <
+                        AreaMassProperties.Compute(Curve.ProjectToPlane(bounds2, Plane.WorldXY)).Area)
+                        offsetHoles.Add(bounds1);
+                    else
+                        offsetHoles.Add(bounds2);
+                }
+
             }
 
             return offsetHoles;
