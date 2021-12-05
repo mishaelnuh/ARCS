@@ -144,11 +144,12 @@ namespace ACORNSpraying
             }
 
             // Extrude the top surface to create a cutter
-            var bBoxHeight = surf.GetBoundingBox(false).Diagonal.Z;
+            var bBox = surf.GetBoundingBox(false);
+            bBox.Union(topSurf.GetBoundingBox(false));
             
             var topSurfaceCutter = Miscellaneous.ExtendSurf(topSurf, Plane.WorldYZ).ToBrep().Faces[0]
                 .CreateExtrusion(
-                    new LineCurve(new Point3d(0, 0, 0), new Point3d(0, 0, bBoxHeight * 10)),
+                    new LineCurve(new Point3d(0, 0, 0), new Point3d(0, 0, bBox.Diagonal.Z * 100)),
                     true);
 
             var holes = OffsetSurfHoles(surf, extSurf, expandDist);
@@ -161,10 +162,10 @@ namespace ACORNSpraying
                 // Get trimmed surface
                 var shiftedCutter = topSurfaceCutter.DuplicateBrep();
                 shiftedCutter.Translate(new Vector3d(0, 0, -currThickness / thicknessFactor));
-                var splitSurface = surf.Split(shiftedCutter, Miscellaneous.ToleranceDistance).ToList();
+                var splitSurface = surf.Split(new List<Brep>() { shiftedCutter }, Vector3d.ZAxis, true, ToleranceDistance).ToList();
 
                 // Filter cutter by minimum area
-                splitSurface = splitSurface.Where(s => s.GetArea() > Miscellaneous.ToleranceDistance).ToList();
+                splitSurface = splitSurface.Where(s => s != null).Where(s => s.GetArea() > Miscellaneous.ToleranceDistance).ToList();
 
                 // No collision with cutter so just add the entire surface
                 if (splitSurface.Count == 0)
