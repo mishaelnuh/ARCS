@@ -613,6 +613,8 @@ namespace ACORNSpraying
                 else
                 {
                     connector = ShortestSubcurve(boundary, boundaryParamEnd, boundaryParamNext);
+                    var shiftZ = Math.Max(-(connector.PointAtStart - pEnd).Z, -(connector.PointAtEnd - pNext).Z);
+                    connector.Translate(0, 0, shiftZ);
                 }
 
                 if (pEnd.DistanceToSquared(connector.PointAtStart) > ToleranceDistance * ToleranceDistance)
