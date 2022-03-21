@@ -195,6 +195,11 @@ namespace ACORNSpraying
             if (!extrusion.IsValid)
                 extrusion.Repair(ToleranceDistance);
 
+            // Do check with a point outside extrusion and flip inside and outside depending on result
+            var checkPoint = new Point3d(curveBounds.Min.X - ToleranceDistance * 1e6, curveBounds.Min.Y - ToleranceDistance * 1e6, curveBounds.Min.Z - ToleranceDistance * 1e6);
+            if (extrusion.IsPointInside(checkPoint, ToleranceDistance, true))
+                extrusion.Flip();
+
             // Get intersection parameters
             var intersections = new List<double> { curve.Domain.Min };
             Rhino.Geometry.Intersect.Intersection.CurveBrep(
@@ -221,15 +226,6 @@ namespace ACORNSpraying
                 subcurves.Add(c);
             }
 
-            // Do check with a point outside extrusion and flip inside and outside depending on result
-            var checkPoint = new Point3d(curveBounds.Min.X - ToleranceDistance * 1e6, curveBounds.Min.Y - ToleranceDistance * 1e6, curveBounds.Min.Z - ToleranceDistance * 1e6);
-            if (extrusion.IsPointInside(checkPoint, ToleranceDistance, true))
-            {
-                var tmpList = outsideCurves;
-                outsideCurves = insideCurves;
-                insideCurves = tmpList;
-            }
-
             outsideCurves = Curve.JoinCurves(outsideCurves).ToList();
             insideCurves = Curve.JoinCurves(insideCurves).ToList();
         }
@@ -238,31 +234,73 @@ namespace ACORNSpraying
         /// Trim curve by a Brep surface.
         /// </summary>
         /// <param name="curve">Curve to trim.</param>
-        /// <param name="boundary">Brep surface to trim with.</param>
+        /// <param name="brep">Brep surface to trim with.</param>
+        /// <param name="expandDist">Extra distance to trim the inner surface to.</param>
         /// <param name="insideCurves">Curves inside the boundary.</param>
         /// <param name="outsideCurves">Curves outside the boundary.</param>
-        public static void TrimCurveSurface(Curve curve, Brep brep, out List<Curve> insideCurves, out List<Curve> outsideCurves, out List<Curve> subcurves)
+        public static void TrimCurveSurface(Curve curve, Brep brep, double expandDist, out List<Curve> insideCurves, out List<Curve> outsideCurves, out List<Curve> subcurves)
         {
             // Get an extrusion to use as intersection Brep
             var curveBounds = curve.GetBoundingBox(true);
             var duplicateBrep = brep.DuplicateBrep();
             var surfBounds = duplicateBrep.GetBoundingBox(true);
-            duplicateBrep.Translate(new Vector3d(0, 0, (curveBounds.Min.Z - surfBounds.Max.Z)) * 2);
+            duplicateBrep.Translate(new Vector3d(0, 0, (curveBounds.Min.Z - surfBounds.Max.Z)) * 3);
             surfBounds = duplicateBrep.GetBoundingBox(true);
-            var extrusionCurve = new LineCurve(new Point3d(), (new Point3d()) + Vector3d.ZAxis * (curveBounds.Max.Z - surfBounds.Min.Z) * 2);
+            var extrusionCurve = new LineCurve(new Point3d(), (new Point3d()) + Vector3d.ZAxis * (curveBounds.Max.Z - surfBounds.Min.Z) * 6);
             var extrusion = duplicateBrep.Faces[0].CreateExtrusion(extrusionCurve, true);
             if (!extrusion.IsValid)
                 extrusion.Repair(ToleranceDistance);
+
+            // Do check with a point outside extrusion and flip inside and outside depending on result
+            var checkPoint = new Point3d(curveBounds.Min.X - ToleranceDistance * 1e6, curveBounds.Min.Y - ToleranceDistance * 1e6, curveBounds.Min.Z - ToleranceDistance * 1e6);
+            if (extrusion.IsPointInside(checkPoint, ToleranceDistance, true))
+                extrusion.Flip();
 
             // Get intersection parameters
             var intersections = new List<double> { curve.Domain.Min };
             Rhino.Geometry.Intersect.Intersection.CurveBrep(
                 curve, extrusion, ToleranceDistance, ToleranceAngle, out double[] tmp);
-            intersections.AddRange(tmp);
-            intersections.AddRange(tmp);
+            var shiftedParams = new List<double>();
+            var sortedTmp = tmp.Distinct().ToList();
+            sortedTmp.Sort();
+            if (expandDist == 0.0)
+                shiftedParams.AddRange(sortedTmp);
+            else
+            {
+                foreach (var t in sortedTmp)
+                {
+                    var currLength = curve.GetLength(new Interval(curve.Domain.T0, t));
+                    var cLength = curve.GetLength();
+
+                    var tangent = curve.TangentAt(t);
+                    tangent.Z = 0;
+                    tangent.Unitize();
+                    var testPoint = curve.PointAt(t) + tangent;
+
+                    var success1 = curve.LengthParameter(currLength + Math.Abs(expandDist), out double p1Param);
+                    var success2 = curve.LengthParameter(currLength - Math.Abs(expandDist), out double p2Param);
+                    if (!success1 || currLength + Math.Abs(expandDist) >= cLength || p1Param < t)
+                    {
+                        p1Param = curve.Domain.T1;
+                    }
+                    if (!success2 || currLength - Math.Abs(expandDist) <= 0.0 || p2Param > t)
+                    {
+                        p2Param = curve.Domain.T0;
+                    }
+
+                    if (extrusion.IsPointInside(testPoint, 0.0, false))
+                    {
+                        shiftedParams.Add(expandDist > 0.0 ? p2Param : p1Param);
+                    }
+                    else
+                    {
+                        shiftedParams.Add(expandDist > 0.0 ? p1Param : p2Param);
+                    }
+                }
+            }
+            intersections.AddRange(shiftedParams);
             intersections.Add(curve.Domain.Max);
             intersections = intersections.Distinct().ToList();
-            intersections.Sort();
 
             // Determine if inside of outside extrusion
             insideCurves = new List<Curve>();
@@ -274,21 +312,29 @@ namespace ACORNSpraying
                 var c = curve.Trim(intersections[i], intersections[i + 1]);
                 if (c != null)
                 {
-                    if (extrusion.IsPointInside(c.PointAtNormalizedLength(0.5), ToleranceDistance, false))
-                        insideCurves.Add(c);
-                    else
-                        outsideCurves.Add(c);
+                    if (expandDist == 0)
+                    {
+                        if (extrusion.IsPointInside(c.PointAtNormalizedLength(0.5), ToleranceDistance, false))
+                            insideCurves.Add(c);
+                        else
+                            outsideCurves.Add(c);
+                    }
+                    else if (expandDist < 0)
+                    {
+                        if (extrusion.IsPointInside(c.PointAtStart, ToleranceDistance, false) && extrusion.IsPointInside(c.PointAtEnd, ToleranceDistance, false) && extrusion.IsPointInside(c.PointAtNormalizedLength(0.5), ToleranceDistance, false))
+                            insideCurves.Add(c);
+                        else
+                            outsideCurves.Add(c);
+                    }
+                    else if (expandDist > 0)
+                    {
+                        if (!extrusion.IsPointInside(c.PointAtStart, ToleranceDistance, false) && !extrusion.IsPointInside(c.PointAtEnd, ToleranceDistance, false) && !extrusion.IsPointInside(c.PointAtNormalizedLength(0.5), ToleranceDistance, false))
+                            outsideCurves.Add(c);
+                        else
+                            insideCurves.Add(c);
+                    }
                     subcurves.Add(c);
                 }
-            }
-
-            // Do check with a point outside extrusion and flip inside and outside depending on result
-            var checkPoint = new Point3d(curveBounds.Min.X - ToleranceDistance * 1e6, curveBounds.Min.Y - ToleranceDistance * 1e6, curveBounds.Min.Z - ToleranceDistance * 1e6);
-            if (extrusion.IsPointInside(checkPoint, ToleranceDistance, true))
-            {
-                var tmpList = outsideCurves;
-                outsideCurves = insideCurves;
-                insideCurves = tmpList;
             }
 
             outsideCurves = Curve.JoinCurves(outsideCurves).ToList();

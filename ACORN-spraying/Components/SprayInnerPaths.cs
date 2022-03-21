@@ -165,13 +165,16 @@ namespace ACORNSpraying
                 var splitSurface = surf.Split(new List<Brep>() { shiftedCutter }, Vector3d.ZAxis, true, ToleranceDistance).ToList();
 
                 // Filter cutter by minimum area
-                splitSurface = splitSurface.Where(s => s != null).Where(s => s.GetArea() > Miscellaneous.ToleranceDistance).ToList();
+                splitSurface = splitSurface
+                    .Where(s => s != null).Where(s => s.GetArea() > Miscellaneous.ToleranceDistance)
+                    .ToList();
 
                 // No collision with cutter so just add the entire surface
                 if (splitSurface.Count == 0)
                     splitSurface.Add(surf.DuplicateBrep());
 
-                splitSurface = splitSurface.Where(s =>
+                splitSurface = splitSurface
+                    .Where(s =>
                     {
                         var points = s.GetWireframe(2).Select(c => c.PointAtNormalizedLength(0.5)).ToList();
                         var closestPoints = shiftedCutter.Faces[0].PullPointsToFace(points, surf.GetBoundingBox(false).Diagonal.SquareLength * 10e9).ToList();
@@ -220,7 +223,7 @@ namespace ACORNSpraying
                         // Trim segments with surface
                         foreach (var sprayCurve in noConnectorPaths)
                         {
-                            Miscellaneous.TrimCurveSurface(sprayCurve.Curve, splitSurf, out List<Curve> insideCurves, out _, out _);
+                            Miscellaneous.TrimCurveSurface(sprayCurve.Curve, splitSurf, expandDist, out List<Curve> insideCurves, out _, out _);
                             var sprayCurves = insideCurves
                                 .Select(c => {
                                     var tmp = sprayCurve.DeepClone();
@@ -236,7 +239,7 @@ namespace ACORNSpraying
                             // Trim repeat segments with surface
                             foreach (var sprayCurve in noConnectorRepeatPaths)
                             {
-                                Miscellaneous.TrimCurveSurface(sprayCurve.Curve, splitSurf, out List<Curve> insideCurves, out _, out _);
+                                Miscellaneous.TrimCurveSurface(sprayCurve.Curve, splitSurf, expandDist, out List<Curve> insideCurves, out _, out _);
                                 var sprayCurves = insideCurves
                                     .Select(c =>
                                     {

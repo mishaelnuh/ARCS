@@ -180,7 +180,7 @@ namespace ACORNSpraying
                     {
                         for (int j = 0; j < path.Count; j++)
                         {
-                            TrimCurveSurface(path[j], cutter, out _, out _, out List<Curve> subcurves);
+                            TrimCurveSurface(path[j], cutter, 0, out _, out _, out List<Curve> subcurves);
 
                             subcurves = subcurves.Where(x => x.GetLength() > ToleranceDistance).ToList();
 
@@ -191,7 +191,7 @@ namespace ACORNSpraying
 
                         for (int j = 0; j < repeatPath.Count; j++)
                         {
-                            TrimCurveSurface(repeatPath[j], cutter, out _, out _, out List<Curve> subcurves);
+                            TrimCurveSurface(repeatPath[j], cutter, 0, out _, out _, out List<Curve> subcurves);
 
                             subcurves = subcurves.Where(x => x.GetLength() > ToleranceDistance).ToList();
 
