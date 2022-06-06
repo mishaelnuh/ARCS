@@ -533,6 +533,9 @@ namespace ARCS
                         norm.Rotate(-angle, curveTangent);
                         norm.Unitize();
 
+                        if (norm.Z > 0)
+                            norm.Reverse();
+
                         normalVecs.Add(norm);
                     }
                 }

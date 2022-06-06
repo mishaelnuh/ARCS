@@ -53,7 +53,7 @@ namespace ARCS
         protected override void RegisterOutputParams(GH_Component.GH_OutputParamManager pManager)
         {
             pManager.AddParameter(new Param_SprayPath(), "sprayPath", "sprayPath", "Spray paths", GH_ParamAccess.list);
-            pManager.AddNumberParameter("thicknesses", "thicknesses", "Thicknesses of each layer", GH_ParamAccess.list);
+            pManager.AddNumberParameter("thicknesses", "thicknesses", "Cummulative thicknesses of each layer", GH_ParamAccess.list);
             pManager.AddBrepParameter("slices", "slices", "Sprayed slices.", GH_ParamAccess.list);
         }
 
