@@ -1,13 +1,13 @@
 ﻿using Grasshopper.Kernel;
 using System;
 using System.Drawing;
-using static ACORNSpraying.Miscellaneous;
+using static ARCS.Miscellaneous;
 
-namespace ACORNSpraying
+namespace ARCS
 {
-    public class ACORNSprayingInfo : GH_AssemblyInfo
+    public class ARCSInfo : GH_AssemblyInfo
     {
-        public ACORNSprayingInfo()
+        public ARCSInfo()
         {
             ToleranceDistance = Rhino.RhinoDoc.ActiveDoc.ModelAbsoluteTolerance;
             ToleranceAngle = Rhino.RhinoDoc.ActiveDoc.ModelAngleToleranceRadians;
@@ -24,7 +24,7 @@ namespace ACORNSpraying
         {
             get
             {
-                return "ACORN-Spraying";
+                return "ARCS";
             }
         }
     public override Bitmap Icon

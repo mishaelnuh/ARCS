@@ -1,19 +1,18 @@
 ﻿using Grasshopper.Kernel;
 using Rhino.Geometry;
 using System;
-using System.Collections.Generic;
-using static ACORNSpraying.Miscellaneous;
+using static ARCS.Miscellaneous;
 
-namespace ACORNSpraying
+namespace ARCS
 {
     public class ExtendSurf : GH_Component
     {
         public override GH_Exposure Exposure { get => GH_Exposure.secondary; }
 
         public ExtendSurf()
-          : base("Extend Surface", "ACORN_ExtendSurf",
+          : base("Extend Surface", "ARCS_ExtendSurf",
               "Extends a surface using consecutive bounding boxes.",
-              "ACORN", "Spraying")
+              "ARCS", "3 | Utilities")
         {
         }
 
@@ -49,7 +48,7 @@ namespace ACORNSpraying
             {
                 // You can add image files to your project resources and access them like this:
                 //return Resources.IconForThisComponent;
-                return null;
+                return Properties.Resources.extend;
             }
         }
 
