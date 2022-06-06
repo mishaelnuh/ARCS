@@ -14,14 +14,16 @@ namespace ARCS
         private BoundingBox clippingBox;
 
         public override GH_Exposure Exposure => GH_Exposure.secondary;
-        //protected override Bitmap Icon => null;
+        
+        protected override Bitmap Icon => Properties.Resources.target;
+
         public bool Hidden { get; set; }
         public bool IsPreviewCapable => true;
         public BoundingBox ClippingBox => clippingBox;
 
 
         public Param_SprayPath() :
-          base(new GH_InstanceDescription("SprayPath", "ARCS_SprayPath", "Spray path", "ARCS", "3 | Utilities"))
+          base(new GH_InstanceDescription("SprayPath", "ARCS_SprayPath", "Spray path", "ARCS", "4 | Params"))
         { }
 
         public override System.Guid ComponentGuid
