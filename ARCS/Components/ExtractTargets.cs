@@ -1,16 +1,11 @@
-﻿using Grasshopper;
-using Grasshopper.Kernel;
-using Grasshopper.Kernel.Data;
+﻿using Grasshopper.Kernel;
+using Grasshopper.Kernel.Parameters;
 using Rhino.Geometry;
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using static ACORNSpraying.PathGeneration;
-using static ACORNSpraying.Miscellaneous;
-using Grasshopper.Kernel.Parameters;
-using Grasshopper.Kernel.Types;
+using static ARCS.Miscellaneous;
 
-namespace ACORNSpraying
+namespace ARCS
 {
     public class ExtractTargets : GH_Component
     {
@@ -19,9 +14,9 @@ namespace ACORNSpraying
         private bool UseDegrees { get; set; } = false;
 
         public ExtractTargets()
-          : base("Extract Targets", "ACORN_Extract",
+          : base("Extract Targets", "ARCS_Extract",
               "Extract robot targets, normals, and speed.",
-              "ACORN", "Spraying")
+              "ARCS", "3 | Utilities")
         {
         }
 
@@ -99,7 +94,7 @@ namespace ACORNSpraying
                 if (i != 0)
                     polyline.RemoveAt(0);
 
-                foreach(var target in polyline)
+                foreach (var target in polyline)
                 {
                     surfBoundary.ClosestPoint(target, out double tmp);
                     surf.Faces[0].ClosestPoint(surfBoundary.PointAt(tmp),

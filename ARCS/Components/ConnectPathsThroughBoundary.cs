@@ -4,25 +4,25 @@ using Rhino.Geometry;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using static ACORNSpraying.PathGeneration;
+using static ARCS.PathGeneration;
 
-namespace ACORNSpraying
+namespace ARCS
 {
     public class ConnectGeometriesThroughBoundary : GH_Component
     {
         public override GH_Exposure Exposure { get => GH_Exposure.primary; }
 
         public ConnectGeometriesThroughBoundary()
-          : base("Connect Geometries Through Boundary", "ACORN_Connect",
+          : base("Connect Geometries Through Boundary", "ACORN_ConnectBoundary",
               "Connects spray paths and other points of interests through connectors made from a curve offset from the surface edges.",
-              "ACORN", "Spraying")
+              "ARCS", "2 | Connection")
         {
         }
 
         protected override void RegisterInputParams(GH_Component.GH_InputParamManager pManager)
         {
             pManager.AddGenericParameter("paths", "paths", "Geometries to connect. Only curves and points.", GH_ParamAccess.list);
-            pManager.AddNumberParameter("connSpeed", "connSpeed", "Off path spraying speed.", GH_ParamAccess.item); 
+            pManager.AddNumberParameter("connSpeed", "connSpeed", "Off path spraying speed.", GH_ParamAccess.item);
             pManager.AddBrepParameter("surf", "surf", "Surface to extend. Input as Brep in order to maintain trims.", GH_ParamAccess.item);
             pManager.AddSurfaceParameter("extSurf", "extSurf", "Extended surface. Use ExtendSurf or untrim the Brep.", GH_ParamAccess.item);
             pManager.AddNumberParameter("expandDist", "expandDist", "Length to extend path lines past surface bounds.", GH_ParamAccess.item, 0);
@@ -61,7 +61,8 @@ namespace ACORNSpraying
                 return;
 
             var sprayObjs = paths
-                .SelectMany(g => {
+                .SelectMany(g =>
+                {
                     if (g.GetType() == typeof(GH_ObjectWrapper))
                     {
                         var sprayPaths = ((g as GH_ObjectWrapper).Value as SprayPath).Select(x => x).ToList();

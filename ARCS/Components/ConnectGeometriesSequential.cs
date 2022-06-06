@@ -1,23 +1,21 @@
-﻿using Grasshopper;
-using Grasshopper.Kernel;
-using Grasshopper.Kernel.Data;
+﻿using Grasshopper.Kernel;
+using Grasshopper.Kernel.Types;
 using Rhino.Geometry;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using static ACORNSpraying.PathGeneration;
-using Grasshopper.Kernel.Types;
+using static ARCS.PathGeneration;
 
-namespace ACORNSpraying
+namespace ARCS
 {
     public class ConnectGeometriesSequential : GH_Component
     {
         public override GH_Exposure Exposure { get => GH_Exposure.primary; }
 
         public ConnectGeometriesSequential()
-          : base("Connect Geometries", "ACORN_Connect2",
+          : base("Connect Geometries", "ARCS_ConnectSimple",
               "Connect geometries in sequence through shortest connections.",
-              "ACORN", "Spraying")
+              "ARCS", "2 | Connection")
         {
         }
 
@@ -53,7 +51,8 @@ namespace ACORNSpraying
                 return;
 
             var sprayObjs = paths
-                .SelectMany(g => {
+                .SelectMany(g =>
+                {
                     if (g.GetType() == typeof(GH_ObjectWrapper))
                     {
                         var sprayPaths = ((g as GH_ObjectWrapper).Value as SprayPath).Select(x => x).ToList();

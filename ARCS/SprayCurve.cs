@@ -3,11 +3,9 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using static ACORNSpraying.Miscellaneous;
+using static ARCS.Miscellaneous;
 
-namespace ACORNSpraying
+namespace ARCS
 {
     [Serializable]
     public class SprayCurve
@@ -187,6 +185,7 @@ namespace ACORNSpraying
 
             return sprayCurves.First().Curve.PointAtStart;
         }
+
         public Point3d PointAtEnd()
         {
             if (sprayCurves.Count < 1)

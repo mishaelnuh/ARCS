@@ -1,15 +1,12 @@
-﻿using Grasshopper;
-using Grasshopper.Kernel;
-using Grasshopper.Kernel.Data;
+﻿using Grasshopper.Kernel;
 using Rhino.Geometry;
-using Rhino.Geometry.Intersect;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using static ACORNSpraying.PathGeneration;
-using static ACORNSpraying.Miscellaneous;
+using static ARCS.Miscellaneous;
+using static ARCS.PathGeneration;
 
-namespace ACORNSpraying
+namespace ARCS
 {
     public class SprayInnerPaths : GH_Component
     {
@@ -19,9 +16,9 @@ namespace ACORNSpraying
         public List<double> EdgeId { get; set; }
 
         public SprayInnerPaths()
-          : base("Spray Inner Paths", "ACORN_SprayInner",
+          : base("Spray Inner Paths", "ARCS_SprayInner",
               "Generates inner spray paths.",
-              "ACORN", "Spraying")
+              "ARCS", "1 | Generation")
         {
         }
 
@@ -32,7 +29,7 @@ namespace ACORNSpraying
             pManager.AddBrepParameter("topSurf", "topSurf", "Top surface to spray to. Input as Brep in order to maintain trims.", GH_ParamAccess.item);
 
             pManager.AddBrepParameter("speedRegions", "speedRegions", "Speed regions defined by Breps. No holes accepted", GH_ParamAccess.list);
-            pManager.AddNumberParameter("speeds", "speeds", "List of speeds associated with each speed region Brep.", GH_ParamAccess.list);
+            pManager.AddNumberParameter("speeds", "speeds", "Single speed for spraying or list of speeds associated with each speed region Brep.", GH_ParamAccess.list);
             pManager.AddNumberParameter("connSpeed", "connSpeed", "Off path spraying speed.", GH_ParamAccess.item);
             pManager.AddNumberParameter("flowRate", "flowRate", "Volumetric flow rate.", GH_ParamAccess.item);
 
@@ -108,7 +105,7 @@ namespace ACORNSpraying
             var basePaths = SprayInnerPaths(surf, extSurf, dist, expandDist, (int)numGeo,
                 sourceEdges.Select(x => (int)x).ToList(),
                 speedRegions, speeds, connSpeed, out List<Curve> surfEdges, out List<SprayPath> repeatPaths);
-            
+
             SurfEdges = surfEdges;
             EdgeId = sourceEdges;
 
@@ -146,7 +143,7 @@ namespace ACORNSpraying
             // Extrude the top surface to create a cutter
             var bBox = surf.GetBoundingBox(false);
             bBox.Union(topSurf.GetBoundingBox(false));
-            
+
             var topSurfaceCutter = Miscellaneous.ExtendSurf(topSurf, Plane.WorldYZ).ToBrep().Faces[0]
                 .CreateExtrusion(
                     new LineCurve(new Point3d(0, 0, 0), new Point3d(0, 0, bBox.Diagonal.Z * 100)),
@@ -157,7 +154,7 @@ namespace ACORNSpraying
             // Loop through thickness
             bool loopFlag = true;
             int currSegmentUsed = Math.Min(0, basePaths.Count - 1);
-            while(loopFlag)
+            while (loopFlag)
             {
                 // Get trimmed surface
                 var shiftedCutter = topSurfaceCutter.DuplicateBrep();
@@ -225,7 +222,8 @@ namespace ACORNSpraying
                         {
                             Miscellaneous.TrimCurveSurface(sprayCurve.Curve, splitSurf, expandDist, out List<Curve> insideCurves, out _, out _);
                             var sprayCurves = insideCurves
-                                .Select(c => {
+                                .Select(c =>
+                                {
                                     var tmp = sprayCurve.DeepClone();
                                     tmp.Curve = c;
                                     return tmp;
@@ -304,7 +302,7 @@ namespace ACORNSpraying
                     newRepeatPath.AvoidHoles(holes);
 
                     // If too short, we also continue
-                    if (newPath.GetLength()  + (pathRepeat > 1 ? newRepeatPath.GetLength() : 0) <= dist)
+                    if (newPath.GetLength() + (pathRepeat > 1 ? newRepeatPath.GetLength() : 0) <= dist)
                         continue;
 
                     // Shift segments and curve to current thickness

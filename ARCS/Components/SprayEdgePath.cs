@@ -1,21 +1,18 @@
-﻿using Grasshopper;
-using Grasshopper.Kernel;
-using Grasshopper.Kernel.Data;
+﻿using Grasshopper.Kernel;
 using Rhino.Geometry;
 using System;
-using System.Collections.Generic;
-using static ACORNSpraying.PathGeneration;
+using static ARCS.PathGeneration;
 
-namespace ACORNSpraying
+namespace ARCS
 {
     public class SprayEdgePath : GH_Component
     {
         public override GH_Exposure Exposure { get => GH_Exposure.primary; }
 
         public SprayEdgePath()
-          : base("Spray Edge Path", "ACORN_SprayEdge",
+          : base("Spray Edge Path", "ARCS_SprayEdge",
               "Generates edge spray path.",
-              "ACORN", "Spraying")
+              "ARCS", "1 | Generation")
         {
         }
 

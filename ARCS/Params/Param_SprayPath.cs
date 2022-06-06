@@ -6,16 +6,14 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
-namespace ACORNSpraying
+namespace ARCS
 {
     public class Param_SprayPath : GH_PersistentParam<GH_SprayPath>, IGH_PreviewObject
     {
         private BoundingBox clippingBox;
 
-        public override GH_Exposure Exposure => GH_Exposure.primary;
+        public override GH_Exposure Exposure => GH_Exposure.secondary;
         //protected override Bitmap Icon => null;
         public bool Hidden { get; set; }
         public bool IsPreviewCapable => true;
@@ -23,7 +21,7 @@ namespace ACORNSpraying
 
 
         public Param_SprayPath() :
-          base(new GH_InstanceDescription("SprayPath", "ACORN_SprayPath", "Spray path", "ACORN", "Params"))
+          base(new GH_InstanceDescription("SprayPath", "ARCS_SprayPath", "Spray path", "ARCS", "3 | Utilities"))
         { }
 
         public override System.Guid ComponentGuid
@@ -103,7 +101,7 @@ namespace ACORNSpraying
             var boundingBox = new BoundingBox();
 
             // Draw edges in the viewport.
-            foreach(var sprayCurve in Value)
+            foreach (var sprayCurve in Value)
             {
                 boundingBox.Union(sprayCurve.Curve.GetBoundingBox(false));
 
@@ -120,7 +118,7 @@ namespace ACORNSpraying
                         percentageSpeed = (sprayCurve.Speed - SprayPath.GlobalMinSpeed) / (SprayPath.GlobalMaxSpeed - SprayPath.GlobalMinSpeed);
                         percentageSpeed = Math.Min(Math.Max(percentageSpeed, 0), 1);
                     }
-                        
+
                     color = Color.FromArgb(
                         (int)(255 * Math.Min(1, percentageSpeed)),
                         0,

@@ -8,8 +8,8 @@
     <ProjectGuid>{4BF6A1EB-9A44-4B33-ADF6-B63271E984B1}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>ACORNSpraying</RootNamespace>
-    <AssemblyName>ACORN-spraying</AssemblyName>
+    <RootNamespace>ARCS</RootNamespace>
+    <AssemblyName>ARCS</AssemblyName>
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <IsWebBootstrapper>false</IsWebBootstrapper>
@@ -63,7 +63,7 @@
     <Compile Include="Components\SprayInnerPaths.cs" />
     <Compile Include="Components\ConnectPathsThroughBoundary.cs" />
     <Compile Include="Components\ExtendSurf.cs" />
-    <Compile Include="ACORNSprayingInfo.cs" />
+    <Compile Include="ARCSInfo.cs" />
     <Compile Include="Miscellaneous.cs" />
     <Compile Include="Params\Param_SprayPath.cs" />
     <Compile Include="PathGeneration.cs" />

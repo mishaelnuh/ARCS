@@ -1,15 +1,29 @@
-﻿using System;
+﻿using Rhino.Geometry;
+using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Rhino.Geometry;
-using static ACORNSpraying.Miscellaneous;
+using static ARCS.Miscellaneous;
 
-namespace ACORNSpraying
+namespace ARCS
 {
     public static class PathGeneration
     {
+        /// <summary>
+        /// Generate inner spray paths.
+        /// </summary>
+        /// <param name="surf">Target surface.</param>
+        /// <param name="extSurf">Extended surface.</param>
+        /// <param name="dist">Distance between paths.</param>
+        /// <param name="expandDist">Distance to extend paths beyond surface boundary.</param>
+        /// <param name="numGeo">Number of geodesic lines used to generate paths.</param>
+        /// <param name="sourceEdges">List of source edges to generate paths for.</param>
+        /// <param name="speedRegions">Regions which defines the speed of the spraying targets.</param>
+        /// <param name="spraySpeed">Speed of speed regions.</param>
+        /// <param name="connectorSpraySpeed">Connection speed.</param>
+        /// <param name="boundaryEdges">Source edge used to generate the spray paths.</param>
+        /// <param name="repeatPaths">Repeated paths used (paths are split into two sets which are offset from each other by half of path distance).</param>
+        /// <returns>List of spray paths.</returns>
+        /// <exception cref="Exception"></exception>
         public static List<SprayPath> SprayInnerPaths(Brep surf, Surface extSurf, double dist, double expandDist, int numGeo,
             List<int> sourceEdges, List<Brep> speedRegions, List<double> spraySpeed, double connectorSpraySpeed,
             out List<Curve> boundaryEdges, out List<SprayPath> repeatPaths)
@@ -215,7 +229,7 @@ namespace ACORNSpraying
                 // Convert geometry to spray paths and associate with speed
                 var sprayPath = new SprayPath();
 
-                foreach(var segment in tmp1.Zip(tmp2, (c, f) => new {Curve = c, IsConnector = f}))
+                foreach (var segment in tmp1.Zip(tmp2, (c, f) => new { Curve = c, IsConnector = f }))
                 {
                     var sprayCurve = new SprayCurve(segment.Curve) { IsConnector = segment.IsConnector };
 
@@ -303,6 +317,15 @@ namespace ACORNSpraying
             return paths;
         }
 
+        /// <summary>
+        /// Generate edge spray paths as boundary loops.
+        /// </summary>
+        /// <param name="surf">Target surface.</param>
+        /// <param name="extSurf">Extended surface.</param>
+        /// <param name="startP">Starting point which defines seam.</param>
+        /// <param name="expandDist">Distance to extend paths beyond surface boundary.</param>
+        /// <param name="spraySpeed">Speed to spray at.</param>
+        /// <returns>List of spray paths.</returns>
         public static SprayPath SprayEdgePath(Brep surf, Surface extSurf, Point3d startP, double expandDist, double spraySpeed)
         {
             var boundary = OffsetSurfBoundary(surf, extSurf, expandDist);
@@ -400,7 +423,7 @@ namespace ACORNSpraying
                 .Select(g => g.DivideByLength(dist, true))
                 .ToList();
 
-            for(int i = 0; i < tParams.Count; i++)
+            for (int i = 0; i < tParams.Count; i++)
             {
                 if (tParams[i] == null || tParams[i].Count() == 0)
                     tParams[i] = new double[] { geodesics[i].Domain.Min };
@@ -473,13 +496,25 @@ namespace ACORNSpraying
             return orthoCut0;
         }
 
+        /// <summary>
+        /// Connect spray path objects through boundary.
+        /// </summary>
+        /// <param name="sprayObjs">Spray paths or objects.</param>
+        /// <param name="connectorSpraySpeed">Speed to connect at.</param>
+        /// <param name="surf">Target surface.</param>
+        /// <param name="extSurf">Surface to extend border on.</param>
+        /// <param name="dist">Distance to offset by.</param>
+        /// <param name="maintainDir">Whether to maintain or flip curve directions.</param>
+        /// <returns>Returns connected spray path.</returns>
+        /// <exception cref="Exception"></exception>
         public static SprayPath ConnectSprayObjsThroughBoundary(List<object> sprayObjs, double connectorSpraySpeed, Brep surf, Surface extSurf, double dist, bool maintainDir)
         {
             if (sprayObjs.Count == 0)
                 return new SprayPath();
 
             var geometryObjects = sprayObjs
-                .Select(o => {
+                .Select(o =>
+                {
                     if (o is SprayCurve)
                         return (o as SprayCurve).Curve as GeometryBase;
                     else if (o is Point)
@@ -503,7 +538,7 @@ namespace ACORNSpraying
                         Speed = connectorSpraySpeed,
                         IsConnector = true
                     };
-                    
+
                     sprayPath.Add(sprayCurve);
                 }
                 else
@@ -606,7 +641,7 @@ namespace ACORNSpraying
                 boundary.ClosestPoint(pNext, out double boundaryParamNext);
 
                 Curve connector;
-                if (Math.Pow((pEnd-pNext).X, 2) + Math.Pow((pEnd - pNext).Y, 2) < ToleranceDistance * ToleranceDistance)
+                if (Math.Pow((pEnd - pNext).X, 2) + Math.Pow((pEnd - pNext).Y, 2) < ToleranceDistance * ToleranceDistance)
                 {
                     connector = new LineCurve(pEnd, pNext);
                 }
@@ -645,19 +680,28 @@ namespace ACORNSpraying
             }
 
             var connectedGeometries = new PolyCurve();
-            foreach(var s in segments)
+            foreach (var s in segments)
                 connectedGeometries.Append(s);
 
             return connectedGeometries;
         }
 
+        /// <summary>
+        /// Connect spray objects together.
+        /// </summary>
+        /// <param name="sprayObjs">Spray objects.</param>
+        /// <param name="connectorSpraySpeed">Connection speed.</param>
+        /// <param name="maintainDir">Whether to maintain or flip curve directions.</param>
+        /// <returns>Connected spray path.</returns>
+        /// <exception cref="Exception"></exception>
         public static SprayPath ConnectSprayObjs(List<object> sprayObjs, double connectorSpraySpeed, bool maintainDir)
         {
             if (sprayObjs.Count == 0)
                 return new SprayPath();
 
             var geometryObjects = sprayObjs
-                .Select(o => {
+                .Select(o =>
+                {
                     if (o is SprayCurve)
                         return (o as SprayCurve).Curve as GeometryBase;
                     else if (o is Point)
@@ -672,7 +716,7 @@ namespace ACORNSpraying
 
             var sprayPath = new SprayPath();
 
-            for(int i = 0; i < segments.Count; i++)
+            for (int i = 0; i < segments.Count; i++)
             {
                 if (isConnector[i])
                 {
@@ -742,7 +786,7 @@ namespace ACORNSpraying
             // Loop through and find all connections
             Point3d currentPosition = new Point3d();
 
-               
+
             if (typeof(Curve).IsAssignableFrom(geometries[0].GetType()))
             {
                 currentPosition = (geometries[0] as Curve).PointAtEnd;
@@ -841,13 +885,22 @@ namespace ACORNSpraying
             return connectedGeometries;
         }
 
+        /// <summary>
+        /// Connect spray objects together in order.
+        /// </summary>
+        /// <param name="sprayObjs">Spray objects.</param>
+        /// <param name="connectorSpraySpeed">Connection speed.</param>
+        /// <param name="maintainDir">Whether to maintain or flip curve directions.</param>
+        /// <returns>Connected spray path.</returns>
+        /// <exception cref="Exception"></exception>
         public static SprayPath ConnectSprayObjsSequential(List<object> sprayObjs, double connectorSpraySpeed, bool maintainDir)
         {
             if (sprayObjs.Count == 0)
                 return new SprayPath();
 
             var geometryObjects = sprayObjs
-                .Select(o => {
+                .Select(o =>
+                {
                     if (o is SprayCurve)
                         return (o as SprayCurve).Curve as GeometryBase;
                     else if (o is Point)
@@ -885,6 +938,16 @@ namespace ACORNSpraying
             return sprayPath;
         }
 
+        /// <summary>
+        /// Connect geometries together in sequence.
+        /// </summary>
+        /// <param name="geometries">Geometries to connect. Only curves and points.</param>
+        /// <param name="isGeometryConnector">Flag to show whether original geometry is a connector. Should be same length as the geometries list.</param>
+        /// <param name="maintainDir">Whether to maintain or flip curve directions.</param>
+        /// <param name="segments">Curve segments exploded.</param>
+        /// <param name="isConnectorSegment">Flags to show which segments are connectors.</param>
+        /// <param name="originalIndex">Original index of curves in the final order.</param>
+        /// <returns>Connected spray path.</returns>
         public static Curve ConnectGeometriesSequential(List<GeometryBase> geometries, List<bool> isGeometryConnector,
             bool maintainDir, out List<Curve> segments, out List<bool> isConnectorSegment, out List<int> originalIndex)
         {
@@ -959,7 +1022,7 @@ namespace ACORNSpraying
                     segments.Add(nextCurve);
                     originalIndex.Add(i);
                     isConnectorSegment.Add(isGeometryConnector[i]);
-                }   
+                }
 
                 currentPosition = nextPosition;
             }

@@ -1,14 +1,12 @@
-﻿using System;
+﻿using Rhino.Geometry;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.Serialization.Formatters.Binary;
-using System.Text;
-using System.Threading.Tasks;
-using Rhino.Geometry;
-using static ACORNSpraying.PathGeneration;
+using static ARCS.PathGeneration;
 
-namespace ACORNSpraying
+namespace ARCS
 {
     public static class Miscellaneous
     {
@@ -116,6 +114,13 @@ namespace ACORNSpraying
             }
         }
 
+        /// <summary>
+        /// Offset the surface holes outwards by a specified distance.
+        /// </summary>
+        /// <param name="surf">Surface to offset holes from. Input as Brep in order to maintain trims.</param>
+        /// <param name="extSurf">Surface to extend border on.</param>
+        /// <param name="dist">Distance to offset by.</param>
+        /// <returns>Offset surface bound curve.</returns>
         public static List<Curve> OffsetSurfHoles(Brep surf, Surface extSurf, double dist)
         {
             var holes = surf.Holes();
@@ -414,6 +419,12 @@ namespace ACORNSpraying
             return loops;
         }
 
+        /// <summary>
+        /// Modify curve to go around holes.
+        /// </summary>
+        /// <param name="curve">Curve to modify./param>
+        /// <param name="holes">List of curves defining holes to go around.</param>
+        /// <returns>Modified curve.</returns>
         public static Curve AvoidHoles(this Curve curve, List<Curve> holes)
         {
             foreach (var hole in holes)
@@ -446,6 +457,14 @@ namespace ACORNSpraying
             return curve;
         }
 
+        /// <summary>
+        /// Return normal vector defining the TCP orientation.
+        /// </summary>
+        /// <param name="surf">Target surface.</param>
+        /// <param name="point">Point to compute normal for.</param>
+        /// <param name="angle">Additional angle for boundary. Only used if isOnEdge is set to true.</param>
+        /// <param name="isOnEdge">Whether to consider the edges separately or not.</param>
+        /// <returns>Normal vector defining the TCP orientation.</returns>
         public static Vector3d AlignNormal(Brep surf, Point3d point, double angle, bool isOnEdge)
         {
             var edgeSprayPath = surf.Boundary();
@@ -539,6 +558,12 @@ namespace ACORNSpraying
             }
         }
 
+        /// <summary>
+        /// Deep clone a generic object using serialisation.
+        /// </summary>
+        /// <typeparam name="T">Object type.</typeparam>
+        /// <param name="obj">Object.</param>
+        /// <returns>Cloned object.</returns>
         public static T DeepClone<T>(this T obj)
         {
             if (obj == null)

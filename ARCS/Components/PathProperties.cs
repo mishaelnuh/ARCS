@@ -1,20 +1,15 @@
-﻿using Grasshopper;
-using Grasshopper.Kernel;
-using Grasshopper.Kernel.Data;
-using Rhino.Geometry;
+﻿using Grasshopper.Kernel;
 using System;
-using System.Collections.Generic;
-using System.Linq;
 
-namespace ACORNSpraying
+namespace ARCS
 {
     public class PathProperties : GH_Component
     {
         public override GH_Exposure Exposure { get => GH_Exposure.secondary; }
         public PathProperties()
-          : base("Path Properties", "ACORN_PathProp",
+          : base("Path Properties", "ARCS_PathProp",
               "Get spray path properties.",
-              "ACORN", "Spraying")
+              "ARCS", "3 | Utilities")
         {
         }
         protected override void RegisterInputParams(GH_Component.GH_InputParamManager pManager)
