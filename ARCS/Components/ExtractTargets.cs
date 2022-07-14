@@ -3,6 +3,7 @@ using Grasshopper.Kernel.Parameters;
 using Rhino.Geometry;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using static ARCS.Miscellaneous;
 
 namespace ARCS
@@ -23,7 +24,7 @@ namespace ARCS
         protected override void RegisterInputParams(GH_Component.GH_InputParamManager pManager)
         {
             pManager.AddParameter(new Param_SprayPath(), "sprayPath", "sprayPath", "Spray paths", GH_ParamAccess.item);
-            pManager.AddBrepParameter("surf", "surf", "Spraying surface to align to.", GH_ParamAccess.item);
+            pManager.AddBrepParameter("surf", "surf", "Spraying surfaces to align to.", GH_ParamAccess.list);
             pManager.AddNumberParameter("edgeDist", "edgeDist", "Distance to align edge to.", GH_ParamAccess.item);
             pManager.AddAngleParameter("edgeAngle", "edgeAngle", "Angle to apply at edge.", GH_ParamAccess.item, 10);
             pManager.AddNumberParameter("tolD", "tolD", "Tolerance distance for discretisation.", GH_ParamAccess.item, 10);
@@ -55,7 +56,7 @@ namespace ARCS
         protected override void SolveInstance(IGH_DataAccess DA)
         {
             object pathRaw = null;
-            Brep surf = null;
+            List<Brep> surfs = new List<Brep>();
             double edgeDist = 0;
             double angle = 0;
             double tolD = 0;
@@ -64,7 +65,7 @@ namespace ARCS
 
 
             DA.GetData(0, ref pathRaw);
-            DA.GetData(1, ref surf);
+            DA.GetDataList(1, surfs);
             DA.GetData(2, ref edgeDist);
             DA.GetData(3, ref angle);
             DA.GetData(4, ref tolD);
@@ -80,8 +81,8 @@ namespace ARCS
             List<Vector3d> normals = new List<Vector3d>();
             List<double> speeds = new List<double>();
 
-            var surfBoundary = surf.Boundary();
-            var boundary2d = Curve.ProjectToPlane(surfBoundary, Plane.WorldXY);
+            var surfBoundaries = surfs.Select(s => s.Boundary()).ToList();
+            var boundaries2d = surfBoundaries.Select(c => Curve.ProjectToPlane(c, Plane.WorldXY)).ToList();
 
             for (int i = 0; i < path.Count; i++)
             {
@@ -96,25 +97,39 @@ namespace ARCS
 
                 foreach (var target in polyline)
                 {
-                    surfBoundary.ClosestPoint(target, out double tmp);
-                    surf.Faces[0].ClosestPoint(surfBoundary.PointAt(tmp),
-                        out double borderU, out double borderV);
-                    surf.Faces[0].ClosestPoint(target,
-                        out double targetU, out double targetV);
-
-                    var distLength = surf.Faces[0].ShortPath(
-                        new Point2d(borderU, borderV),
-                        new Point2d(targetU, targetV),
-                        ToleranceDistance).GetLength();
-
                     targets.Add(target);
-                    normals.Add(AlignNormal(surf, target, angle, path[i].IsEdge || distLength <= edgeDist + ToleranceDistance));
 
-                    // Check if not on surface boundary
-                    var point2d = new Point3d(target) { Z = 0 };
-                    var containmentTest = boundary2d.Contains(point2d, Plane.WorldXY, ToleranceDistance);
+                    var addedNormal = false;
+                    for (int j = 0; j < surfs.Count; j++)
+                    {
+                        var containment = boundaries2d[j].Contains(target, Plane.WorldXY, ToleranceDistance);
+                        if (containment == PointContainment.Inside || containment == PointContainment.Coincident)
+                        {
+                            surfBoundaries[j].ClosestPoint(target, out double tmp);
+                            surfs[j].Faces[0].ClosestPoint(surfBoundaries[j].PointAt(tmp),
+                                out double borderU, out double borderV);
+                            surfs[j].Faces[0].ClosestPoint(target,
+                                out double targetU, out double targetV);
 
-                    speeds.Add(containmentTest == PointContainment.Outside ? safeSpeed : path[i].Speed);
+                            var distLength = surfs[j].Faces[0].ShortPath(
+                                new Point2d(borderU, borderV),
+                                new Point2d(targetU, targetV),
+                                ToleranceDistance).GetLength();
+
+                            normals.Add(AlignNormal(surfs[j], target, angle, path[i].IsEdge || distLength <= edgeDist + ToleranceDistance));
+
+                            speeds.Add(path[i].Speed);
+
+                            addedNormal = true;
+                            break;
+                        }
+                    }
+
+                    if (!addedNormal)
+                    {
+                        normals.Add(-Vector3d.ZAxis);
+                        speeds.Add(safeSpeed);
+                    }
                 }
             }
 
