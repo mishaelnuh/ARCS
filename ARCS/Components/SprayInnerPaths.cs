@@ -39,7 +39,7 @@ namespace ARCS
             pManager.AddNumberParameter("numGeo", "numGeo", "Number of geodesics to calculate paths from.", GH_ParamAccess.item, 10);
             pManager.AddNumberParameter("sourceEdges", "sourceEdges", "Edges to align to. If not set, all edges are used.", GH_ParamAccess.list);
             pManager.AddNumberParameter("pathRepeat", "pathRepeat", "Number of times to repeat each path.", GH_ParamAccess.item, 1);
-            pManager.AddNumberParameter("thicknessFactor", "thicknessFactor", "Multiplicative factor for thickness.", GH_ParamAccess.item, 1);
+            pManager.AddNumberParameter("thicknessFactor", "thicknessFactor", "Multiplicative factor for thickness. Only works when top surface is defined.", GH_ParamAccess.item, 1);
 
             pManager[2].Optional = true;
             pManager[3].Optional = true;
